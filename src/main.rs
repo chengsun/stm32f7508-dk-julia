@@ -581,23 +581,42 @@ fn LTDC() {
         LTDCState::Initialised => {
             let c_a = 0.7885 * cos(4. * (*FRAME as f32) / (FRAME_MAX as f32));
             let c_b = 0.7885 * sin(4. * (*FRAME as f32) / (FRAME_MAX as f32));
-            for pixel_y in 0..(FB_H+1)/2 {
-                for pixel_x in 0..FB_W {
-                    let mut a = (((pixel_x * 2) as i32 - FB_W as i32) as f32) / (min(FB_W, FB_H) as f32);
-                    let mut b = (((pixel_y * 2) as i32 - FB_H as i32) as f32) / (min(FB_W, FB_H) as f32);
-                    let mut final_iter = 0;
-                    const ITER_MAX: u32 = 12;
-                    for iter in 1..ITER_MAX {
-                        let a2 = a*a;
-                        let b2 = b*b;
-                        if a2+b2 < 4. {
-                            final_iter = iter;
-                        }
-                        let ab = a*b;
-                        a = a2 - b2 + c_a;
-                        b = ab + ab + c_b;
+            let compute_value = move |pixel_x, pixel_y| {
+                let mut a = (((pixel_x * 2) as i32 - FB_W as i32) as f32) / (min(FB_W, FB_H) as f32);
+                let mut b = (((pixel_y * 2) as i32 - FB_H as i32) as f32) / (min(FB_W, FB_H) as f32);
+                let mut final_iter = 0;
+                const ITER_MAX: u32 = 10;
+                for iter in 1..ITER_MAX {
+                    let a2 = a*a;
+                    let b2 = b*b;
+                    if a2+b2 < 4. {
+                        final_iter = iter;
                     }
-                    let value = (final_iter * 255 / ITER_MAX) as u8;
+                    let ab = a*b;
+                    a = a2 - b2 + c_a;
+                    b = ab + ab + c_b;
+                }
+                (final_iter * 255 / ITER_MAX) as u8
+            };
+            for pixel_y in 0..(FB_H+1)/2 {
+                for pixel_x in ((pixel_y & 1)..FB_W).step_by(2) {
+                    let value = compute_value(pixel_x, pixel_y);
+                    (*FB)[pixel_y * FB_W + pixel_x] = value;
+                    (*FB)[(FB_H-pixel_y-1) * FB_W + (FB_W-pixel_x-1)] = value;
+                }
+            }
+            for pixel_x in 0..FB_W {
+                let value = compute_value(pixel_x, 0);
+                (*FB)[0 * FB_W + pixel_x] = value;
+                (*FB)[(FB_H-1) * FB_W + (FB_W-pixel_x-1)] = value;
+            }
+            for pixel_y in 1..(FB_H+1)/2 {
+                for pixel_x in ((1 - (pixel_y & 1))..FB_W).step_by(2) {
+                    let value =
+                        (((*FB)[(pixel_y-1) * FB_W + pixel_x] as u32
+                        + (*FB)[(pixel_y+1) * FB_W + pixel_x] as u32
+                        + (*FB)[pixel_y * FB_W + pixel_x-1] as u32
+                        + (*FB)[pixel_y * FB_W + pixel_x+1] as u32) / 4) as u8;
                     (*FB)[pixel_y * FB_W + pixel_x] = value;
                     (*FB)[(FB_H-pixel_y-1) * FB_W + (FB_W-pixel_x-1)] = value;
                 }
@@ -629,7 +648,7 @@ fn TIM7() {
     let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
     let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
     let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
+    //hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
 }
 
 #[exception]
