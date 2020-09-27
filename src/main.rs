@@ -113,7 +113,7 @@ fn main() -> ! {
         {
             let latency = 6;
             flash.acr.write(|w| {
-                w.latency().bits(latency)
+                w.latency().bits(latency).arten().bit(true)
             });
             hprintln!("Requested Flash latency wait states increase").unwrap();
 
@@ -581,24 +581,25 @@ fn LTDC() {
         LTDCState::Initialised => {
             let c_a = 0.7885 * cos(4. * (*FRAME as f32) / (FRAME_MAX as f32));
             let c_b = 0.7885 * sin(4. * (*FRAME as f32) / (FRAME_MAX as f32));
-            for pixel_y in 0..FB_H {
+            for pixel_y in 0..(FB_H+1)/2 {
                 for pixel_x in 0..FB_W {
-                    let idx = pixel_y * FB_W + pixel_x;
                     let mut a = (((pixel_x * 2) as i32 - FB_W as i32) as f32) / (min(FB_W, FB_H) as f32);
                     let mut b = (((pixel_y * 2) as i32 - FB_H as i32) as f32) / (min(FB_W, FB_H) as f32);
-                    let mut final_iter = ITER_MAX;
-                    const ITER_MAX: u32 = 8;
-                    for iter in 0..ITER_MAX {
+                    let mut final_iter = 0;
+                    const ITER_MAX: u32 = 12;
+                    for iter in 1..ITER_MAX {
                         let a2 = a*a;
                         let b2 = b*b;
-                        if a2+b2 >= 4. {
-                            final_iter = min(final_iter, iter);
+                        if a2+b2 < 4. {
+                            final_iter = iter;
                         }
                         let ab = a*b;
                         a = a2 - b2 + c_a;
                         b = ab + ab + c_b;
                     }
-                    (*FB)[idx] = (final_iter * 255 / ITER_MAX) as u8;
+                    let value = (final_iter * 255 / ITER_MAX) as u8;
+                    (*FB)[pixel_y * FB_W + pixel_x] = value;
+                    (*FB)[(FB_H-pixel_y-1) * FB_W + (FB_W-pixel_x-1)] = value;
                 }
             }
             *FRAME += 1;
