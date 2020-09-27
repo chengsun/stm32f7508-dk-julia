@@ -111,7 +111,7 @@ fn main() -> ! {
 
         let flash = dp.FLASH;
         {
-            let latency = 3;
+            let latency = 6;
             flash.acr.write(|w| {
                 w.latency().bits(latency)
             });
@@ -131,9 +131,9 @@ fn main() -> ! {
 
         // PLL input = HSI = 16MHz
         // PLL output = 16MHz * PLLN / PLLM / PLLP = 16MHz * 64 / 8 / 8
-        #[cfg(clock_debug)] let hsi = 16.;
+        #[cfg(feature = "clock_debug")] let hsi = 16.;
         let pllm = 8;
-        let plln = 64;
+        let plln = 210;
         let pllp = 2;
         rcc.pllcfgr.write(|w| unsafe {
             let w = w.pllsrc().bit(false).pllm().bits(pllm).plln().bits(plln);
@@ -145,7 +145,7 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(clock_debug)] {
+        #[cfg(feature = "clock_debug")] {
             let pll_vco_input = hsi / (pllm as f32);
             let pll_vco_output = pll_vco_input * (plln as f32);
             let sysclk = pll_vco_output / (pllp as f32);
@@ -169,7 +169,7 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(clock_debug)] {
+        #[cfg(feature = "clock_debug")] {
             let pllsai_vco_input = hsi / (pllm as f32);
             let pllsai_vco_output = pllsai_vco_input * (pllsain as f32);
             let pllsai_r_output = pllsai_vco_output / (pllsair as f32);
@@ -487,7 +487,7 @@ fn main() -> ! {
         rcc.apb1lpenr.modify(|_, w| { w.tim7lpen().bit(true) });
         tim7.dier.write(|w| { w.uie().bit(true) });
         tim7.psc.write(|w| { w.psc().bits(32_000 - 1) });
-        tim7.arr.write(|w| { w.arr().bits(1_000) });
+        tim7.arr.write(|w| { w.arr().bits(20_000) });
         tim7.cr1.write(|w| { w.cen().bit(true) });
         *GTIM7.borrow(cs).borrow_mut() = Some(tim7);
         unsafe { NVIC::unmask(Interrupt::TIM7); }
@@ -629,7 +629,7 @@ fn TIM7() {
     let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
     let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
     let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    //hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
+    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
 }
 
 #[exception]
