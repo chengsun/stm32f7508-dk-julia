@@ -12,19 +12,68 @@ use panic_semihosting as _; // logs messages to the host stderr; requires a debu
 // use panic_abort as _; // requires nightly
 
 use core::cell::RefCell;
+use core::cmp::min;
 use core::convert::TryInto;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use cortex_m::interrupt::Mutex;
-use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cortex_m_semihosting::hprintln;
-use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
+use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC, TIM7};
+
+fn sin_internal(offset: f32) -> f32 {
+    assert!(offset >= 0. && offset <= 1.);
+    offset * (3. - offset * offset) / 2.
+}
+
+fn sin(theta: f32) -> f32 {
+    assert!(theta >= 0. && theta <= 4.);
+    if theta <= 1. {
+        sin_internal(theta)
+    } else if theta <= 2. {
+        sin_internal(2. - theta)
+    } else if theta <= 3. {
+        -sin_internal(theta - 2.)
+    } else {
+        -sin_internal(4. - theta)
+    }
+}
+
+fn cos(theta: f32) -> f32 {
+    assert!(theta >= 0. && theta <= 4.);
+        if theta <= 1. {
+            sin_internal(1. - theta)
+        } else if theta <= 2. {
+            -sin_internal(theta - 1.)
+        } else if theta <= 3. {
+            -sin_internal(3. - theta)
+        } else {
+            sin_internal(theta - 3.)
+        }
+}
+
+struct CPUUtilisation {
+}
+
+impl CPUUtilisation {
+    pub fn new() -> CPUUtilisation {
+        CPUUtilisation {
+        }
+    }
+    pub fn mark_idle_start(&mut self) {
+    }
+    pub fn mark_busy_start(&mut self) {
+    }
+}
+
+static GCPU_UTILISATION: Mutex<RefCell<Option<CPUUtilisation>>> = Mutex::new(RefCell::new(None));
 
 static GWAKEUP_CTR: AtomicU32 = AtomicU32::new(0);
 static GLTDC_CTR: AtomicU32 = AtomicU32::new(0);
 static GLTDC_ER_CTR: AtomicU32 = AtomicU32::new(0);
 static GLTDC: Mutex<RefCell<Option<LTDC>>> = Mutex::new(RefCell::new(None));
+static GTIM7: Mutex<RefCell<Option<TIM7>>> = Mutex::new(RefCell::new(None));
 
 struct LTDCInfo {
     hsync: u16,
@@ -85,7 +134,7 @@ fn main() -> ! {
         #[cfg(clock_debug)] let hsi = 16.;
         let pllm = 8;
         let plln = 64;
-        let pllp = 8;
+        let pllp = 2;
         rcc.pllcfgr.write(|w| unsafe {
             let w = w.pllsrc().bit(false).pllm().bits(pllm).plln().bits(plln);
             match pllp {
@@ -430,20 +479,44 @@ fn main() -> ! {
         unsafe { NVIC::unmask(Interrupt::LTDC_ER); }
 
         //////////////////////////////////////////////////////////////////////////
-        // background loop
+        // message timer loop
 
-        // configure the system timer to wrap around every second
+        let tim7 = dp.TIM7;
+
+        rcc.apb1enr.modify(|_, w| { w.tim7en().bit(true) });
+        rcc.apb1lpenr.modify(|_, w| { w.tim7lpen().bit(true) });
+        tim7.dier.write(|w| { w.uie().bit(true) });
+        tim7.psc.write(|w| { w.psc().bits(32_000 - 1) });
+        tim7.arr.write(|w| { w.arr().bits(1_000) });
+        tim7.cr1.write(|w| { w.cen().bit(true) });
+        *GTIM7.borrow(cs).borrow_mut() = Some(tim7);
+        unsafe { NVIC::unmask(Interrupt::TIM7); }
+
+        // configure the freerunning system timer
         let mut syst = cp.SYST;
         syst.set_clock_source(SystClkSource::Core);
-        syst.set_reload(16_000_000); // 1s
+        syst.set_reload(0xFFFFFFFF);
+        syst.clear_current();
         syst.enable_counter();
-        syst.enable_interrupt();
+
+        *GCPU_UTILISATION.borrow(cs).borrow_mut() = Some(CPUUtilisation::new());
     });
 
-
     loop {
-        cortex_m::asm::wfi();
-        GWAKEUP_CTR.fetch_add(1, Ordering::SeqCst);
+        cortex_m::interrupt::free(move |cs| {
+            let mut x = GCPU_UTILISATION.borrow(cs).borrow_mut();
+            let cpu_utilisation = x.as_mut().unwrap();
+            cpu_utilisation.mark_idle_start();
+            cortex_m::asm::wfi();
+            cpu_utilisation.mark_busy_start();
+        });
+        // the interrupt runs between these two calls to [free].
+        cortex_m::interrupt::free(move |cs| {
+            let mut x = GCPU_UTILISATION.borrow(cs).borrow_mut();
+            let cpu_utilisation = x.as_mut().unwrap();
+            cpu_utilisation.mark_idle_start();
+            GWAKEUP_CTR.fetch_add(1, Ordering::SeqCst);
+        });
     }
 }
 
@@ -455,13 +528,15 @@ enum LTDCState {
 
 static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState::Uninitialised));
 
-const FB_W: usize = 480;
-const FB_H: usize = 272;
+const BORDER: usize = 10;
+const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
+const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
+const FRAME_MAX: u32 = 60;
 #[interrupt]
 fn LTDC() {
     static mut LTDC: Option<LTDC> = None;
     static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
-    static mut FOO: usize = 0;
+    static mut FRAME: u32 = 0;
 
     let ltdc = LTDC.get_or_insert_with(|| {
         cortex_m::interrupt::free(|cs| GLTDC.borrow(cs).replace(None).unwrap())
@@ -504,10 +579,32 @@ fn LTDC() {
             cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
         },
         LTDCState::Initialised => {
-            for _ in 0..100 {
-                FB[*FOO] = *FOO as u8;
-                *FOO += 1;
-                if *FOO >= FB.len() { *FOO = 0; }
+            let c_a = 0.7885 * cos(4. * (*FRAME as f32) / (FRAME_MAX as f32));
+            let c_b = 0.7885 * sin(4. * (*FRAME as f32) / (FRAME_MAX as f32));
+            for pixel_y in 0..FB_H {
+                for pixel_x in 0..FB_W {
+                    let idx = pixel_y * FB_W + pixel_x;
+                    let mut a = (((pixel_x * 2) as i32 - FB_W as i32) as f32) / (min(FB_W, FB_H) as f32);
+                    let mut b = (((pixel_y * 2) as i32 - FB_H as i32) as f32) / (min(FB_W, FB_H) as f32);
+                    let mut final_iter = None;
+                    const ITER_MAX: u32 = 8;
+                    for iter in 0..ITER_MAX {
+                        let a2 = a*a;
+                        let b2 = b*b;
+                        if a2+b2 >= 4. {
+                            final_iter.get_or_insert(iter);
+                        }
+                        let ab = a*b;
+                        a = a2 - b2 + c_a;
+                        b = ab + ab + c_b;
+                    }
+                    let final_iter = final_iter.unwrap_or(ITER_MAX);
+                    (*FB)[idx] = (final_iter * 255 / ITER_MAX) as u8;
+                }
+            }
+            *FRAME += 1;
+            if *FRAME >= FRAME_MAX {
+                *FRAME = 0;
             }
             GLTDC_CTR.fetch_add(1, Ordering::SeqCst);
         },
@@ -525,12 +622,14 @@ fn LTDC_ER() {
     }
 }
 
-#[exception]
-fn SysTick() {
+#[interrupt]
+fn TIM7() {
+    cortex_m::interrupt::free(|cs| GTIM7.borrow(cs).borrow_mut().as_mut().unwrap().sr.modify(|_, w| { w.uif().bit(false) }));
+
     let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
     let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
     let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
+    //hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
 }
 
 #[exception]
