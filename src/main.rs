@@ -586,20 +586,19 @@ fn LTDC() {
                     let idx = pixel_y * FB_W + pixel_x;
                     let mut a = (((pixel_x * 2) as i32 - FB_W as i32) as f32) / (min(FB_W, FB_H) as f32);
                     let mut b = (((pixel_y * 2) as i32 - FB_H as i32) as f32) / (min(FB_W, FB_H) as f32);
-                    let mut final_iter = None;
+                    let mut final_iter = ITER_MAX;
                     const ITER_MAX: u32 = 8;
                     for iter in 0..ITER_MAX {
                         let a2 = a*a;
                         let b2 = b*b;
                         if a2+b2 >= 4. {
-                            final_iter.get_or_insert(iter);
+                            final_iter = min(final_iter, iter);
                         }
                         let ab = a*b;
                         a = a2 - b2 + c_a;
                         b = ab + ab + c_b;
                     }
-                    let final_iter = final_iter.unwrap_or(ITER_MAX);
-                    (*FB)[idx] = if pixel_y == 0 || pixel_y == FB_H-1 || pixel_x==0 || pixel_x== FB_W-1 {255} else {(final_iter * 255 / ITER_MAX) as u8};
+                    (*FB)[idx] = (final_iter * 255 / ITER_MAX) as u8;
                 }
             }
             *FRAME += 1;
