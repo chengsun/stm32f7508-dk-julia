@@ -549,8 +549,8 @@ fn LTDC() {
             // configure layers
 
             // x, y
-            ltdc.layer1.whpcr.write(|w| unsafe { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + 10).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 10) });
-            ltdc.layer1.wvpcr.write(|w| unsafe { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + 10).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 10) });
+            ltdc.layer1.whpcr.write(|w| unsafe { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + 10).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 11) });
+            ltdc.layer1.wvpcr.write(|w| unsafe { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + 10).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 11) });
             // format
             // TODO: make enumerated values
             ltdc.layer1.pfcr.write(|w| unsafe { w.pf().bits(0b101) });
@@ -599,7 +599,7 @@ fn LTDC() {
                         b = ab + ab + c_b;
                     }
                     let final_iter = final_iter.unwrap_or(ITER_MAX);
-                    (*FB)[idx] = (final_iter * 255 / ITER_MAX) as u8;
+                    (*FB)[idx] = if pixel_y == 0 || pixel_y == FB_H-1 || pixel_x==0 || pixel_x== FB_W-1 {255} else {(final_iter * 255 / ITER_MAX) as u8};
                 }
             }
             *FRAME += 1;
