@@ -518,7 +518,7 @@ static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState
 const BORDER: usize = 10;
 const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
 const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
-const FRAME_MAX: u32 = 120;
+const FRAME_MAX: u32 = 600;
 #[interrupt]
 fn LTDC() {
     static mut LTDC: Option<LTDC> = None;
@@ -574,8 +574,8 @@ fn LTDC() {
             let compute_value = |pixel_x, pixel_y| {
                 let mut a = (((pixel_x * 2) as i32 - FB_W as i32) << 13) / min(FB_W, FB_H) as i32;
                 let mut b = (((pixel_y * 2) as i32 - FB_H as i32) << 13) / min(FB_W, FB_H) as i32;
-                let mut final_iter = -1;
-                const ITER_MAX: i32 = 9;
+                const ITER_MAX: i32 = 32;
+                let mut final_iter = ITER_MAX<<13;
                 let mut prev_dist_m_4 = -1;
 
                 for iter in 0..ITER_MAX {
@@ -583,20 +583,16 @@ fn LTDC() {
                     let b2 = b*b >> 13;
                     let this_dist_m_4 = a2+b2 - (4<<13);
                     if this_dist_m_4 >= 0 {
-                        if final_iter < 0 {
-                            let lerp = (this_dist_m_4 << 13) / (this_dist_m_4 - prev_dist_m_4);
-                            final_iter = (iter << 13) - lerp;
-                        }
-                        a = 2<<13;
-                        b = 0;
-                    } else {
-                        let ab = a*b >> 13;
-                        a = a2 - b2 + c_a;
-                        b = ab + ab + c_b;
+                        let lerp = (this_dist_m_4 << 13) / (this_dist_m_4 - prev_dist_m_4);
+                        final_iter = (iter << 13) - lerp;
+                        break;
                     }
+                    let ab = a*b >> 13;
+                    a = a2 - b2 + c_a;
+                    b = ab + ab + c_b;
                     prev_dist_m_4 = this_dist_m_4;
                 }
-                (1 + (final_iter * 254) / (ITER_MAX << 13)) as u8
+                ((final_iter * 255) / (ITER_MAX << 13)) as u8
             };
             let populate_value = |fb: &mut [u8], pixel_x, pixel_y, value| {
                 fb[pixel_y * FB_W + pixel_x] = value;
@@ -606,25 +602,27 @@ fn LTDC() {
                 let value = compute_value(pixel_x, 0);
                 populate_value(&mut *FB, pixel_x, 0, value);
             }
-            for pixel_y in 1..FB_H/2 {
-                for pixel_x in ((pixel_y & 1)..FB_W).step_by(2) {
-                    let value = compute_value(pixel_x, pixel_y);
-                    populate_value(&mut *FB, pixel_x, pixel_y, value);
+            for pixel_y in 1..FB_H/2+1 {
+                if pixel_y < FB_H/2 {
+                    let mut pixel_x = pixel_y & 1;
+                    while pixel_x < FB_W {
+                        let value = compute_value(pixel_x, pixel_y);
+                        populate_value(&mut *FB, pixel_x, pixel_y, value);
+                        pixel_x += 2;
+                    }
                 }
                 if pixel_y >= 2 {
-                    for pixel_x in ((pixel_y & 1)..FB_W).step_by(2) {
+                    let mut pixel_x = pixel_y & 1;
+                    while pixel_x < FB_W {
                         let value =
                             (((*FB)[(pixel_y-2) * FB_W + pixel_x] as u32
                             + (*FB)[(pixel_y+0) * FB_W + pixel_x] as u32
                             + (*FB)[(pixel_y-1) * FB_W + pixel_x-1] as u32
                             + (*FB)[(pixel_y-1) * FB_W + pixel_x+1] as u32) / 4) as u8;
                         populate_value(&mut *FB, pixel_x, pixel_y-1, value);
+                        pixel_x += 2;
                     }
                 }
-            }
-            for pixel_x in 0..FB_W {
-                let value = compute_value(pixel_x, FB_H/2);
-                populate_value(&mut *FB, pixel_x, FB_H/2, value);
             }
             *FRAME += 1;
             if *FRAME >= FRAME_MAX {
