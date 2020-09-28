@@ -27,29 +27,16 @@ fn sin_internal(offset: i32) -> i32 {
     (offset>>4) * ((3<<18) - (offset>>4) * (offset>>4)) >> 15
 }
 
-fn sin(theta: i32) -> i32 {
-    assert!(theta >= 0 && theta <= (4<<13));
-    if theta <= (1<<13) {
-        sin_internal(theta)
-    } else if theta <= (2<<13) {
-        sin_internal((2<<13) - theta)
-    } else if theta <= (3<<13) {
-        -sin_internal(theta - (2<<13))
-    } else {
-        -sin_internal((4<<13) - theta)
-    }
-}
-
-fn cos(theta: i32) -> i32 {
+fn cos_sin(theta: i32) -> (i32, i32) {
     assert!(theta >= 0 && theta <= (4<<13));
     if theta <= 1<<13 {
-        sin_internal((1<<13) - theta)
+        (sin_internal((1<<13) - theta), sin_internal(theta))
     } else if theta <= 2<<13 {
-        -sin_internal(theta - (1<<13))
+        (-sin_internal(theta - (1<<13)), sin_internal((2<<13) - theta))
     } else if theta <= 3<<13 {
-        -sin_internal((3<<13) - theta)
+        (-sin_internal((3<<13) - theta), -sin_internal(theta - (2<<13)))
     } else {
-        sin_internal(theta - (3<<13))
+        (sin_internal(theta - (3<<13)), -sin_internal((4<<13) - theta))
     }
 }
 
@@ -149,7 +136,7 @@ fn main() -> ! {
             let pll_vco_input = hsi / (pllm as f32);
             let pll_vco_output = pll_vco_input * (plln as f32);
             let sysclk = pll_vco_output / (pllp as f32);
-            hprintln!("PLL VCO input  = {} MHZ (1-2 MHz)", pll_vco_input).unwrap();
+            hprintln!("PLL VCO input  = {} MHz (1-2 MHz)", pll_vco_input).unwrap();
             hprintln!("PLL VCO output = {} MHz (100-432 MHz)", pll_vco_output).unwrap();
             hprintln!("sysclk         = {} MHz (<216 MHz)", sysclk).unwrap();
         }
@@ -174,7 +161,7 @@ fn main() -> ! {
             let pllsai_vco_output = pllsai_vco_input * (pllsain as f32);
             let pllsai_r_output = pllsai_vco_output / (pllsair as f32);
             let ltdc_clk = pllsai_r_output / (pllsaidivr as f32);
-            hprintln!("PLLSAI VCO input  = {} MHZ (1-2 MHz)", pllsai_vco_input).unwrap();
+            hprintln!("PLLSAI VCO input  = {} MHz (1-2 MHz)", pllsai_vco_input).unwrap();
             hprintln!("PLLSAI VCO output = {} MHz (100-432 MHz)", pllsai_vco_output).unwrap();
             hprintln!("PLLSAI_R output   = {} MHz", pllsai_r_output).unwrap();
             hprintln!("LTDC clk          = {} MHz", ltdc_clk).unwrap();
@@ -531,7 +518,7 @@ static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState
 const BORDER: usize = 10;
 const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
 const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
-const FRAME_MAX: u32 = 60;
+const FRAME_MAX: u32 = 120;
 #[interrupt]
 fn LTDC() {
     static mut LTDC: Option<LTDC> = None;
@@ -541,6 +528,7 @@ fn LTDC() {
     let ltdc = LTDC.get_or_insert_with(|| {
         cortex_m::interrupt::free(|cs| GLTDC.borrow(cs).replace(None).unwrap())
     });
+    if !ltdc.isr.read().lif().bit() { return; }
     ltdc.icr.write(|w| { w.clif().bit(true) });
 
     match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
@@ -580,13 +568,14 @@ fn LTDC() {
         },
         LTDCState::Initialised => {
             let coeff = (0.7885 * (1<<13) as f32) as i32;
-            let c_a = (coeff * cos(((4 * *FRAME as i32) << 13) / FRAME_MAX as i32)) >> 13;
-            let c_b = (coeff * sin(((4 * *FRAME as i32) << 13) / FRAME_MAX as i32)) >> 13;
+            let (cos, sin) = cos_sin(((4 * *FRAME as i32) << 13) / FRAME_MAX as i32);
+            let c_a = (coeff * cos) >> 13;
+            let c_b = (coeff * sin) >> 13;
             let compute_value = |pixel_x, pixel_y| {
                 let mut a = (((pixel_x * 2) as i32 - FB_W as i32) << 13) / min(FB_W, FB_H) as i32;
                 let mut b = (((pixel_y * 2) as i32 - FB_H as i32) << 13) / min(FB_W, FB_H) as i32;
                 let mut final_iter = -1;
-                const ITER_MAX: i32 = 8;
+                const ITER_MAX: i32 = 9;
                 let mut prev_dist_m_4 = -1;
 
                 for iter in 0..ITER_MAX {
@@ -664,7 +653,7 @@ fn TIM7() {
     let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
     let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
     let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
+    //hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
 }
 
 #[exception]
