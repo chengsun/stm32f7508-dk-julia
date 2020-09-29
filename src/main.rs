@@ -156,7 +156,7 @@ fn main() -> ! {
         // PLLSAI input = HSI = 16MHz
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
         let pllsain = 54;
-        let pllsair = 3;
+        let pllsair = 4;
         let pllsaidivr = 4;
         rcc.pllsaicfgr.write(|w| unsafe {
             w.pllsain().bits(pllsain).pllsair().bits(pllsair)
@@ -595,23 +595,23 @@ fn LTDC() {
                 let fb_size = min(FB_W, FB_H) as i32;
                 let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
                 let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-                const ITER_MAX: i32 = 32;
+                const ITER_MAX: i32 = 30;
                 let mut final_iter = ITER_MAX<<Q;
-                let mut prev_dist_m_4 = -40<<Q;
+                let mut prev_dist = -40<<Q;
 
                 for iter in 0..ITER_MAX {
                     let a2 = a*a >> Q;
                     let b2 = b*b >> Q;
-                    let this_dist_m_4 = a2+b2 - (4<<Q);
-                    if this_dist_m_4 >= 0 {
-                        let lerp = (this_dist_m_4 << 8) / ((this_dist_m_4 - prev_dist_m_4) >> (Q-8));
+                    let this_dist = a2+b2;
+                    if this_dist >= (4<<Q) {
+                        let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
                         final_iter = (iter << Q) - lerp;
                         break;
                     }
                     let two_ab = a*b >> (Q-1);
                     a = a2 - b2 + c_a;
                     b = two_ab + c_b;
-                    prev_dist_m_4 = this_dist_m_4;
+                    prev_dist = this_dist;
                 }
                 ((final_iter * 255) / (ITER_MAX << Q)) as u8
             };
@@ -652,6 +652,7 @@ fn LTDC() {
             GLTDC_CTR.fetch_add(1, Ordering::SeqCst);
         },
     }
+    //assert!(!ltdc.isr.read().lif().bit());
 }
 
 #[interrupt]
