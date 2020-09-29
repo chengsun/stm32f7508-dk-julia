@@ -7,8 +7,8 @@ use panic_semihosting as _; // logs messages to the host stderr; requires a debu
 // use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
 #[cfg(not(debug_assertions))]
-use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
-//use panic_halt as _;
+//use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
+use panic_halt as _;
 // use panic_abort as _; // requires nightly
 
 use core::cell::RefCell;
@@ -86,6 +86,7 @@ const LTDC_INFO: LTDCInfo = LTDCInfo {
 
 #[entry]
 fn main() -> ! {
+    #[cfg(debug_assertions)]
     hprintln!("Starting up").unwrap();
 
     let cp = cortex_m::Peripherals::take().unwrap();
@@ -102,10 +103,12 @@ fn main() -> ! {
             flash.acr.write(|w| {
                 w.latency().bits(latency).arten().bit(true)
             });
+            #[cfg(debug_assertions)]
             hprintln!("Requested Flash latency wait states increase").unwrap();
 
             let mut i: u32 = 0;
             while flash.acr.read().latency().bits() != latency { i += 1; }
+            #[cfg(debug_assertions)]
             hprintln!("Flash latency wait states increased after {} iters", i).unwrap();
         }
 
@@ -132,7 +135,7 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(feature = "clock_debug")] {
+        #[cfg(all(debug_assertions, feature = "clock_debug"))] {
             let pll_vco_input = hsi / (pllm as f32);
             let pll_vco_output = pll_vco_input * (plln as f32);
             let sysclk = pll_vco_output / (pllp as f32);
@@ -156,7 +159,7 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(feature = "clock_debug")] {
+        #[cfg(all(debug_assertions, feature = "clock_debug"))] {
             let pllsai_vco_input = hsi / (pllm as f32);
             let pllsai_vco_output = pllsai_vco_input * (pllsain as f32);
             let pllsai_r_output = pllsai_vco_output / (pllsair as f32);
@@ -170,6 +173,7 @@ fn main() -> ! {
         rcc.cr.write(|w| {
             w.pllon().bit(true).pllsaion().bit(true)
         });
+        #[cfg(debug_assertions)]
         hprintln!("PLL and PLLSAI started").unwrap();
 
         {
@@ -179,17 +183,20 @@ fn main() -> ! {
                 if cr.pllrdy().bit() && cr.pllsairdy().bit() { break; }
                 i += 1;
             }
+            #[cfg(debug_assertions)]
             hprintln!("PLL and PLLSAI locked after {} iters", i).unwrap();
         }
 
         rcc.cfgr.write(|w| unsafe {
             w.sw().bits(0b10)
         });
+        #[cfg(debug_assertions)]
         hprintln!("Requested system clock switch to PLL").unwrap();
 
         {
             let mut i: u32 = 0;
             while rcc.cfgr.read().sws().bits() != 0b10 { i += 1; }
+            #[cfg(debug_assertions)]
             hprintln!("System clock switched to PLL after {} iters", i).unwrap();
         }
 
@@ -434,6 +441,7 @@ fn main() -> ! {
         gpiok.ospeedr.modify(|_, w| { w.ospeedr3().low_speed() });
         gpiok.moder  .modify(|_, w| { w.  moder3().output() });
 
+        #[cfg(debug_assertions)]
         hprintln!("Configured GPIOs for LCD").unwrap();
 
         let ltdc = dp.LTDC;
@@ -557,10 +565,12 @@ fn LTDC() {
 
             // reload shadow registers immediately
             ltdc.srcr.write(|w| { w.imr().bit(true) });
+            #[cfg(debug_assertions)]
             hprintln!("Requested LCD register reload immediately").unwrap();
             {
                 let mut i: u32 = 0;
                 while ltdc.srcr.read().imr().bit() { i += 1; }
+                #[cfg(debug_assertions)]
                 hprintln!("LCD register reloaded after {} iters", i).unwrap();
             }
 
@@ -576,20 +586,20 @@ fn LTDC() {
                 let mut b = (((pixel_y * 2) as i32 - FB_H as i32) << 13) / min(FB_W, FB_H) as i32;
                 const ITER_MAX: i32 = 32;
                 let mut final_iter = ITER_MAX<<13;
-                let mut prev_dist_m_4 = -1;
+                let mut prev_dist_m_4 = -40<<13;
 
                 for iter in 0..ITER_MAX {
                     let a2 = a*a >> 13;
                     let b2 = b*b >> 13;
                     let this_dist_m_4 = a2+b2 - (4<<13);
                     if this_dist_m_4 >= 0 {
-                        let lerp = (this_dist_m_4 << 13) / (this_dist_m_4 - prev_dist_m_4);
+                        let lerp = (this_dist_m_4 << 8) / ((this_dist_m_4 - prev_dist_m_4) >> 5);
                         final_iter = (iter << 13) - lerp;
                         break;
                     }
-                    let ab = a*b >> 13;
+                    let two_ab = a*b >> 12;
                     a = a2 - b2 + c_a;
-                    b = ab + ab + c_b;
+                    b = two_ab + c_b;
                     prev_dist_m_4 = this_dist_m_4;
                 }
                 ((final_iter * 255) / (ITER_MAX << 13)) as u8
@@ -651,7 +661,8 @@ fn TIM7() {
     let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
     let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
     let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    //hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
+    #[cfg(debug_assertions)]
+    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
 }
 
 #[exception]
