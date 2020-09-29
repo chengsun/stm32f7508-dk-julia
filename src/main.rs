@@ -74,6 +74,19 @@ const LTDC_INFO: LTDCInfo = LTDCInfo {
     vfp: 8,
 };
 
+#[derive(Copy, Clone)]
+enum LTDCState {
+    Uninitialised,
+    Initialised,
+}
+
+static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState::Uninitialised));
+
+const BORDER: usize = 10;
+const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
+const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
+const FRAME_MAX: u32 = 600;
+
 #[entry]
 fn main() -> ! {
     #[cfg(debug_assertions)]
@@ -446,7 +459,7 @@ fn main() -> ! {
         ltdc.gcr.write(|w| { w.hspol().bit(false).vspol().bit(false).depol().bit(false).pcpol().bit(false) });
 
         // enable line interrupt
-        ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp) });
+        ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16) });
         ltdc.ier.write(|w| { w.lie().bit(true) });
 
         // enable the LTDC peripheral
@@ -466,18 +479,6 @@ fn main() -> ! {
     }
 }
 
-#[derive(Copy, Clone)]
-enum LTDCState {
-    Uninitialised,
-    Initialised,
-}
-
-static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState::Uninitialised));
-
-const BORDER: usize = 10;
-const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
-const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
-const FRAME_MAX: u32 = 600;
 #[interrupt]
 fn LTDC() {
     static mut LTDC: Option<LTDC> = None;
@@ -568,7 +569,7 @@ fn LTDC() {
             };
             let wait_for_line = |fb: &mut [u8], pixel_y: usize| {
                 loop {
-                    if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
+                    if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
                         break;
                     }
                     if ltdc.isr.read().lif().bit() {
