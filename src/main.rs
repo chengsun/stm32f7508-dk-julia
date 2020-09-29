@@ -7,8 +7,8 @@ use panic_semihosting as _; // logs messages to the host stderr; requires a debu
 // use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
 #[cfg(not(debug_assertions))]
-use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
-//use panic_halt as _;
+//use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
+use panic_halt as _;
 // use panic_abort as _; // requires nightly
 
 use core::cell::RefCell;
@@ -20,7 +20,7 @@ use cortex_m::interrupt::Mutex;
 use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cortex_m_semihosting::hprintln;
-use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC, TIM7};
+use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
 
 const Q: i32 = 10;
 
@@ -50,27 +50,7 @@ fn cos_sin(theta: i32) -> (i32, i32) {
     }
 }
 
-struct CPUUtilisation {
-}
-
-impl CPUUtilisation {
-    pub fn new() -> CPUUtilisation {
-        CPUUtilisation {
-        }
-    }
-    pub fn mark_idle_start(&mut self) {
-    }
-    pub fn mark_busy_start(&mut self) {
-    }
-}
-
-static GCPU_UTILISATION: Mutex<RefCell<Option<CPUUtilisation>>> = Mutex::new(RefCell::new(None));
-
-static GWAKEUP_CTR: AtomicU32 = AtomicU32::new(0);
-static GLTDC_CTR: AtomicU32 = AtomicU32::new(0);
-static GLTDC_ER_CTR: AtomicU32 = AtomicU32::new(0);
 static GLTDC: Mutex<RefCell<Option<LTDC>>> = Mutex::new(RefCell::new(None));
-static GTIM7: Mutex<RefCell<Option<TIM7>>> = Mutex::new(RefCell::new(None));
 
 struct LTDCInfo {
     hsync: u16,
@@ -465,12 +445,9 @@ fn main() -> ! {
 
         ltdc.gcr.write(|w| { w.hspol().bit(false).vspol().bit(false).depol().bit(false).pcpol().bit(false) });
 
-        // set background colour
-        ltdc.bccr.write(|w| unsafe { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
-
         // enable line interrupt
         ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp) });
-        ltdc.ier.write(|w| { w.lie().bit(true).fuie().bit(true).terrie().bit(true) });
+        ltdc.ier.write(|w| { w.lie().bit(true) });
 
         // enable the LTDC peripheral
         ltdc.gcr.modify(|_, w| { w.ltdcen().bit(true) });
@@ -481,47 +458,11 @@ fn main() -> ! {
 
         *GLTDC.borrow(cs).borrow_mut() = Some(ltdc);
         unsafe { NVIC::unmask(Interrupt::LTDC); }
-        unsafe { NVIC::unmask(Interrupt::LTDC_ER); }
 
-        //////////////////////////////////////////////////////////////////////////
-        // message timer loop
-
-        let tim7 = dp.TIM7;
-
-        rcc.apb1enr.modify(|_, w| { w.tim7en().bit(true) });
-        rcc.apb1lpenr.modify(|_, w| { w.tim7lpen().bit(true) });
-        tim7.dier.write(|w| { w.uie().bit(true) });
-        tim7.psc.write(|w| { w.psc().bits(32_000 - 1) });
-        tim7.arr.write(|w| { w.arr().bits(20_000) });
-        tim7.cr1.write(|w| { w.cen().bit(true) });
-        *GTIM7.borrow(cs).borrow_mut() = Some(tim7);
-        unsafe { NVIC::unmask(Interrupt::TIM7); }
-
-        // configure the freerunning system timer
-        let mut syst = cp.SYST;
-        syst.set_clock_source(SystClkSource::Core);
-        syst.set_reload(0xFFFFFFFF);
-        syst.clear_current();
-        syst.enable_counter();
-
-        *GCPU_UTILISATION.borrow(cs).borrow_mut() = Some(CPUUtilisation::new());
     });
 
     loop {
-        cortex_m::interrupt::free(move |cs| {
-            let mut x = GCPU_UTILISATION.borrow(cs).borrow_mut();
-            let cpu_utilisation = x.as_mut().unwrap();
-            cpu_utilisation.mark_idle_start();
-            cortex_m::asm::wfi();
-            cpu_utilisation.mark_busy_start();
-        });
-        // the interrupt runs between these two calls to [free].
-        cortex_m::interrupt::free(move |cs| {
-            let mut x = GCPU_UTILISATION.borrow(cs).borrow_mut();
-            let cpu_utilisation = x.as_mut().unwrap();
-            cpu_utilisation.mark_idle_start();
-            GWAKEUP_CTR.fetch_add(1, Ordering::SeqCst);
-        });
+        cortex_m::asm::wfi();
     }
 }
 
@@ -553,6 +494,9 @@ fn LTDC() {
         LTDCState::Uninitialised => {
             ////////////////////////////////////////////////////////////////////////
             // configure layers
+
+            // set background colour
+            ltdc.bccr.write(|w| unsafe { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
 
             // x, y
             ltdc.layer1.whpcr.write(|w| unsafe { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + 10).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 11) });
@@ -622,7 +566,7 @@ fn LTDC() {
                   + fb[(pixel_y+0) * FB_W + pixel_x+1] as u32)
                  / 4) as u8
             };
-            let mut wait_for_line = |fb: &mut [u8], pixel_y: usize| {
+            let wait_for_line = |fb: &mut [u8], pixel_y: usize| {
                 loop {
                     if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
                         break;
@@ -694,40 +638,7 @@ fn LTDC() {
             if *FRAME >= FRAME_MAX {
                 *FRAME = 0;
             }
-            GLTDC_CTR.fetch_add(1, Ordering::SeqCst);
         },
     }
     assert!(!ltdc.isr.read().lif().bit());
-}
-
-#[interrupt]
-fn LTDC_ER() {
-    match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
-        LTDCState::Uninitialised => {
-        },
-        LTDCState::Initialised => {
-            GLTDC_ER_CTR.fetch_add(1, Ordering::SeqCst);
-        }
-    }
-}
-
-#[interrupt]
-fn TIM7() {
-    cortex_m::interrupt::free(|cs| GTIM7.borrow(cs).borrow_mut().as_mut().unwrap().sr.modify(|_, w| { w.uif().bit(false) }));
-
-    let ltdc_ctr = GLTDC_CTR.swap(0, Ordering::SeqCst);
-    let ltdc_er_ctr = GLTDC_ER_CTR.swap(0, Ordering::SeqCst);
-    let wakeup_ctr = GWAKEUP_CTR.swap(0, Ordering::SeqCst);
-    #[cfg(debug_assertions)]
-    hprintln!("ltdc: {}, ltdc_er: {}, wakeup: {}", ltdc_ctr, ltdc_er_ctr, wakeup_ctr).unwrap();
-}
-
-#[exception]
-fn HardFault(ef: &ExceptionFrame) -> ! {
-    panic!("{:#?}", ef);
-}
-
-#[exception]
-fn DefaultHandler(irqn: i16) {
-    panic!("Unhandled exception (IRQn = {})", irqn);
 }
