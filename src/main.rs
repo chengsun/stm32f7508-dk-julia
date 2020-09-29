@@ -22,21 +22,31 @@ use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cortex_m_semihosting::hprintln;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC, TIM7};
 
+const Q: i32 = 8;
+
 fn sin_internal(offset: i32) -> i32 {
-    assert!(offset >= 0 && offset <= (1<<13));
-    (offset>>4) * ((3<<18) - (offset>>4) * (offset>>4)) >> 15
+    assert!(offset >= 0 && offset <= (1<<Q));
+    match Q {
+        8 => offset * ((3<<16) - offset*offset) >> 17,
+        9 => offset * ((3<<18) - offset*offset) >> 19,
+        10 => (offset>>1) * ((3<<18) - (offset>>1)*(offset>>1)) >> 18,
+        11 => (offset>>2) * ((3<<18) - (offset>>2)*(offset>>2)) >> 17,
+        12 => (offset>>3) * ((3<<18) - (offset>>3)*(offset>>3)) >> 16,
+        13 => (offset>>4) * ((3<<18) - (offset>>4)*(offset>>4)) >> 15,
+        _ => unreachable!()
+    }
 }
 
 fn cos_sin(theta: i32) -> (i32, i32) {
-    assert!(theta >= 0 && theta <= (4<<13));
-    if theta <= 1<<13 {
-        (sin_internal((1<<13) - theta), sin_internal(theta))
-    } else if theta <= 2<<13 {
-        (-sin_internal(theta - (1<<13)), sin_internal((2<<13) - theta))
-    } else if theta <= 3<<13 {
-        (-sin_internal((3<<13) - theta), -sin_internal(theta - (2<<13)))
+    assert!(theta >= 0 && theta <= (4<<Q));
+    if theta <= 1<<Q {
+        (sin_internal((1<<Q) - theta), sin_internal(theta))
+    } else if theta <= 2<<Q {
+        (-sin_internal(theta - (1<<Q)), sin_internal((2<<Q) - theta))
+    } else if theta <= 3<<Q {
+        (-sin_internal((3<<Q) - theta), -sin_internal(theta - (2<<Q)))
     } else {
-        (sin_internal(theta - (3<<13)), -sin_internal((4<<13) - theta))
+        (sin_internal(theta - (3<<Q)), -sin_internal((4<<Q) - theta))
     }
 }
 
@@ -577,32 +587,32 @@ fn LTDC() {
             cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
         },
         LTDCState::Initialised => {
-            let coeff = (0.7885 * (1<<13) as f32) as i32;
-            let (cos, sin) = cos_sin(((4 * *FRAME as i32) << 13) / FRAME_MAX as i32);
-            let c_a = (coeff * cos) >> 13;
-            let c_b = (coeff * sin) >> 13;
+            let coeff = (0.7885 * (1<<Q) as f32) as i32;
+            let (cos, sin) = cos_sin(((4 * *FRAME as i32) << Q) / FRAME_MAX as i32);
+            let c_a = (coeff * cos) >> Q;
+            let c_b = (coeff * sin) >> Q;
             let compute_value = |pixel_x, pixel_y| {
-                let mut a = (((pixel_x * 2) as i32 - FB_W as i32) << 13) / min(FB_W, FB_H) as i32;
-                let mut b = (((pixel_y * 2) as i32 - FB_H as i32) << 13) / min(FB_W, FB_H) as i32;
+                let mut a = (((pixel_x * 2) as i32 - FB_W as i32) << Q) / min(FB_W, FB_H) as i32;
+                let mut b = (((pixel_y * 2) as i32 - FB_H as i32) << Q) / min(FB_W, FB_H) as i32;
                 const ITER_MAX: i32 = 32;
-                let mut final_iter = ITER_MAX<<13;
-                let mut prev_dist_m_4 = -40<<13;
+                let mut final_iter = ITER_MAX<<Q;
+                let mut prev_dist_m_4 = -40<<Q;
 
                 for iter in 0..ITER_MAX {
-                    let a2 = a*a >> 13;
-                    let b2 = b*b >> 13;
-                    let this_dist_m_4 = a2+b2 - (4<<13);
+                    let a2 = a*a >> Q;
+                    let b2 = b*b >> Q;
+                    let this_dist_m_4 = a2+b2 - (4<<Q);
                     if this_dist_m_4 >= 0 {
-                        let lerp = (this_dist_m_4 << 8) / ((this_dist_m_4 - prev_dist_m_4) >> 5);
-                        final_iter = (iter << 13) - lerp;
+                        let lerp = (this_dist_m_4 << 8) / ((this_dist_m_4 - prev_dist_m_4) >> (Q-8));
+                        final_iter = (iter << Q) - lerp;
                         break;
                     }
-                    let two_ab = a*b >> 12;
+                    let two_ab = a*b >> (Q-1);
                     a = a2 - b2 + c_a;
                     b = two_ab + c_b;
                     prev_dist_m_4 = this_dist_m_4;
                 }
-                ((final_iter * 255) / (ITER_MAX << 13)) as u8
+                ((final_iter * 255) / (ITER_MAX << Q)) as u8
             };
             let populate_value = |fb: &mut [u8], pixel_x, pixel_y, value| {
                 fb[pixel_y * FB_W + pixel_x] = value;
