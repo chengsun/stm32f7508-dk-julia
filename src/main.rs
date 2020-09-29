@@ -22,7 +22,7 @@ use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cortex_m_semihosting::hprintln;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC, TIM7};
 
-const Q: i32 = 8;
+const Q: i32 = 10;
 
 fn sin_internal(offset: i32) -> i32 {
     assert!(offset >= 0 && offset <= (1<<Q));
