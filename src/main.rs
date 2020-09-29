@@ -7,8 +7,8 @@ use panic_semihosting as _; // logs messages to the host stderr; requires a debu
 // use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
 #[cfg(not(debug_assertions))]
-//use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
-use panic_halt as _;
+use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
+//use panic_halt as _;
 // use panic_abort as _; // requires nightly
 
 use core::cell::RefCell;
@@ -109,7 +109,7 @@ fn main() -> ! {
 
         let flash = dp.FLASH;
         {
-            let latency = 6;
+            let latency = 7;
             flash.acr.write(|w| {
                 w.latency().bits(latency).arten().bit(true)
             });
@@ -133,7 +133,7 @@ fn main() -> ! {
         // PLL output = 16MHz * PLLN / PLLM / PLLP = 16MHz * 64 / 8 / 8
         #[cfg(feature = "clock_debug")] let hsi = 16.;
         let pllm = 8;
-        let plln = 210;
+        let plln = 216;
         let pllp = 2;
         rcc.pllcfgr.write(|w| unsafe {
             let w = w.pllsrc().bit(false).pllm().bits(pllm).plln().bits(plln);
@@ -156,7 +156,7 @@ fn main() -> ! {
         // PLLSAI input = HSI = 16MHz
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
         let pllsain = 54;
-        let pllsair = 4;
+        let pllsair = 5;
         let pllsaidivr = 4;
         rcc.pllsaicfgr.write(|w| unsafe {
             w.pllsain().bits(pllsain).pllsair().bits(pllsair)
@@ -469,7 +469,7 @@ fn main() -> ! {
         ltdc.bccr.write(|w| unsafe { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
 
         // enable line interrupt
-        ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah) });
+        ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp) });
         ltdc.ier.write(|w| { w.lie().bit(true).fuie().bit(true).terrie().bit(true) });
 
         // enable the LTDC peripheral
@@ -595,7 +595,7 @@ fn LTDC() {
                 let fb_size = min(FB_W, FB_H) as i32;
                 let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
                 let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-                const ITER_MAX: i32 = 30;
+                const ITER_MAX: i32 = 40;
                 let mut final_iter = ITER_MAX<<Q;
                 let mut prev_dist = -40<<Q;
 
@@ -615,34 +615,79 @@ fn LTDC() {
                 }
                 ((final_iter * 255) / (ITER_MAX << Q)) as u8
             };
-            let populate_value = |fb: &mut [u8], pixel_x, pixel_y, value| {
-                fb[pixel_y * FB_W + pixel_x] = value;
-                fb[(FB_H-pixel_y-1) * FB_W + (FB_W-pixel_x-1)] = value;
+            let average_value = |fb: &[u8], pixel_x, pixel_y| {
+                ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
+                  + fb[(pixel_y+1) * FB_W + pixel_x] as u32
+                  + fb[(pixel_y+0) * FB_W + pixel_x-1] as u32
+                  + fb[(pixel_y+0) * FB_W + pixel_x+1] as u32)
+                 / 4) as u8
             };
-            for pixel_x in 0..FB_W {
-                let value = compute_value(pixel_x, 0);
-                populate_value(&mut *FB, pixel_x, 0, value);
+            let mut wait_for_line = |fb: &mut [u8], pixel_y: usize| {
+                loop {
+                    if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
+                        break;
+                    }
+                    if ltdc.isr.read().lif().bit() {
+                        for pixel_x in 0..FB_W {
+                            fb[pixel_y * FB_W + pixel_x] = 222;
+                        }
+                        panic!("Timed out on line {}", pixel_y);
+                    }
+                    // It is a mystery why this helps. But it helps significantly.
+                    cortex_m::asm::nop();
+                }
+            };
+            {
+                let pixel_y = 0;
+                wait_for_line(&mut *FB, pixel_y);
+                for pixel_x in 0..FB_W {
+                    let value = compute_value(pixel_x, pixel_y);
+                    (*FB)[pixel_y * FB_W + pixel_x] = value;
+                }
             }
             for pixel_y in 1..FB_H/2+1 {
+                wait_for_line(&mut *FB, pixel_y);
                 if pixel_y < FB_H/2 {
                     let mut pixel_x = pixel_y & 1;
                     while pixel_x < FB_W {
                         let value = compute_value(pixel_x, pixel_y);
-                        populate_value(&mut *FB, pixel_x, pixel_y, value);
+                        (*FB)[pixel_y * FB_W + pixel_x] = value;
                         pixel_x += 2;
                     }
                 }
                 if pixel_y >= 2 {
-                    let mut pixel_x = pixel_y & 1;
+                    let pixel_y = pixel_y - 1;
+                    let mut pixel_x = (pixel_y & 1) ^ 1;
                     while pixel_x < FB_W {
-                        let value =
-                            (((*FB)[(pixel_y-2) * FB_W + pixel_x] as u32
-                            + (*FB)[(pixel_y+0) * FB_W + pixel_x] as u32
-                            + (*FB)[(pixel_y-1) * FB_W + pixel_x-1] as u32
-                            + (*FB)[(pixel_y-1) * FB_W + pixel_x+1] as u32) / 4) as u8;
-                        populate_value(&mut *FB, pixel_x, pixel_y-1, value);
+                        let value = average_value(&*FB, pixel_x, pixel_y);
+                        (*FB)[pixel_y * FB_W + pixel_x] = value;
                         pixel_x += 2;
                     }
+                }
+            }
+            {
+                let pixel_y = FB_H/2;
+                wait_for_line(&mut *FB, pixel_y);
+                let mut pixel_x = pixel_y & 1;
+                while pixel_x < FB_W {
+                    (*FB)[pixel_y * FB_W + pixel_x] = (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
+                    pixel_x += 2;
+                }
+            }
+            {
+                let pixel_y = FB_H/2-1;
+                let mut pixel_x = (pixel_y & 1) ^ 1;
+                while pixel_x < FB_W {
+                    let value = average_value(&*FB, pixel_x, pixel_y);
+                    (*FB)[pixel_y * FB_W + pixel_x] = value;
+                    (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1] = value;
+                    pixel_x += 2;
+                }
+            }
+            for pixel_y in FB_H/2+1..FB_H {
+                wait_for_line(&mut *FB, pixel_y);
+                for pixel_x in 0..FB_W {
+                    (*FB)[pixel_y * FB_W + pixel_x] = (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
                 }
             }
             *FRAME += 1;
@@ -652,7 +697,7 @@ fn LTDC() {
             GLTDC_CTR.fetch_add(1, Ordering::SeqCst);
         },
     }
-    //assert!(!ltdc.isr.read().lif().bit());
+    assert!(!ltdc.isr.read().lif().bit());
 }
 
 #[interrupt]
