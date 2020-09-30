@@ -540,7 +540,7 @@ fn LTDC() {
                 let fb_size = min(FB_W, FB_H) as i32;
                 let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
                 let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-                const ITER_MAX: i32 = 40;
+                const ITER_MAX: i32 = 42;
                 let mut final_iter = ITER_MAX<<Q;
                 let mut prev_dist = -40<<Q;
 
