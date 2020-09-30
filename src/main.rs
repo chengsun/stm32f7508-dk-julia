@@ -1,25 +1,13 @@
 #![no_std]
 #![no_main]
 
-// pick a panicking behavior
-#[cfg(debug_assertions)]
-use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
-// use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
-
-#[cfg(not(debug_assertions))]
-//use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 use panic_halt as _;
-// use panic_abort as _; // requires nightly
 
 use core::cell::RefCell;
-use core::cmp::{max, min};
 use core::convert::TryInto;
-use core::sync::atomic::{AtomicU32, Ordering};
 
 use cortex_m::interrupt::Mutex;
-use cortex_m::peripheral::{SYST, syst::SystClkSource};
-use cortex_m_rt::{entry, exception, ExceptionFrame};
-use cortex_m_semihosting::hprintln;
+use cortex_m_rt::entry;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
 
 const Q: i32 = 10;
@@ -89,10 +77,7 @@ const FRAME_MAX: u32 = 600;
 
 #[entry]
 fn main() -> ! {
-    #[cfg(debug_assertions)]
-    hprintln!("Starting up").unwrap();
-
-    let cp = cortex_m::Peripherals::take().unwrap();
+    let _cp = cortex_m::Peripherals::take().unwrap();
     let dp = stm32f7::stm32f750::Peripherals::take().unwrap();
 
     cortex_m::interrupt::free(move |cs| {
@@ -106,13 +91,8 @@ fn main() -> ! {
             flash.acr.write(|w| {
                 w.latency().bits(latency).arten().bit(true)
             });
-            #[cfg(debug_assertions)]
-            hprintln!("Requested Flash latency wait states increase").unwrap();
 
-            let mut i: u32 = 0;
-            while flash.acr.read().latency().bits() != latency { i += 1; }
-            #[cfg(debug_assertions)]
-            hprintln!("Flash latency wait states increased after {} iters", i).unwrap();
+            while flash.acr.read().latency().bits() != latency { }
         }
 
         //////////////////////////////////////////////////////////////////////////
@@ -124,7 +104,6 @@ fn main() -> ! {
 
         // PLL input = HSI = 16MHz
         // PLL output = 16MHz * PLLN / PLLM / PLLP = 16MHz * 64 / 8 / 8
-        #[cfg(feature = "clock_debug")] let hsi = 16.;
         let pllm = 8;
         let plln = 216;
         let pllp = 2;
@@ -138,14 +117,6 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(all(debug_assertions, feature = "clock_debug"))] {
-            let pll_vco_input = hsi / (pllm as f32);
-            let pll_vco_output = pll_vco_input * (plln as f32);
-            let sysclk = pll_vco_output / (pllp as f32);
-            hprintln!("PLL VCO input  = {} MHz (1-2 MHz)", pll_vco_input).unwrap();
-            hprintln!("PLL VCO output = {} MHz (100-432 MHz)", pll_vco_output).unwrap();
-            hprintln!("sysclk         = {} MHz (<216 MHz)", sysclk).unwrap();
-        }
         // PLLSAI input = HSI = 16MHz
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
         let pllsain = 65;
@@ -162,46 +133,21 @@ fn main() -> ! {
                 _ => unreachable!()
             }
         });
-        #[cfg(all(debug_assertions, feature = "clock_debug"))] {
-            let pllsai_vco_input = hsi / (pllm as f32);
-            let pllsai_vco_output = pllsai_vco_input * (pllsain as f32);
-            let pllsai_r_output = pllsai_vco_output / (pllsair as f32);
-            let ltdc_clk = pllsai_r_output / (pllsaidivr as f32);
-            hprintln!("PLLSAI VCO input  = {} MHz (1-2 MHz)", pllsai_vco_input).unwrap();
-            hprintln!("PLLSAI VCO output = {} MHz (100-432 MHz)", pllsai_vco_output).unwrap();
-            hprintln!("PLLSAI_R output   = {} MHz", pllsai_r_output).unwrap();
-            hprintln!("LTDC clk          = {} MHz", ltdc_clk).unwrap();
-        }
 
         rcc.cr.write(|w| {
             w.pllon().bit(true).pllsaion().bit(true)
         });
-        #[cfg(debug_assertions)]
-        hprintln!("PLL and PLLSAI started").unwrap();
 
-        {
-            let mut i: u32 = 0;
-            loop {
-                let cr = rcc.cr.read();
-                if cr.pllrdy().bit() && cr.pllsairdy().bit() { break; }
-                i += 1;
-            }
-            #[cfg(debug_assertions)]
-            hprintln!("PLL and PLLSAI locked after {} iters", i).unwrap();
+        loop {
+            let cr = rcc.cr.read();
+            if cr.pllrdy().bit() && cr.pllsairdy().bit() { break; }
         }
 
         rcc.cfgr.write(|w| unsafe {
             w.sw().bits(0b10)
         });
-        #[cfg(debug_assertions)]
-        hprintln!("Requested system clock switch to PLL").unwrap();
 
-        {
-            let mut i: u32 = 0;
-            while rcc.cfgr.read().sws().bits() != 0b10 { i += 1; }
-            #[cfg(debug_assertions)]
-            hprintln!("System clock switched to PLL after {} iters", i).unwrap();
-        }
+        while rcc.cfgr.read().sws().bits() != 0b10 { }
 
         //////////////////////////////////////////////////////////////////////////
         // configure the LCD GPIO pins
@@ -444,26 +390,25 @@ fn main() -> ! {
         gpiok.ospeedr.modify(|_, w| { w.ospeedr3().low_speed() });
         gpiok.moder  .modify(|_, w| { w.  moder3().output() });
 
-        #[cfg(debug_assertions)]
-        hprintln!("Configured GPIOs for LCD").unwrap();
+        // Step 2. Enable and setup the LTDC peripheral.
 
         let ltdc = dp.LTDC;
 
         rcc.apb2enr.modify(|_, w| { w.ltdcen().bit(true) });
 
-        ltdc.sscr.write(|w| unsafe { w.hsw().bits(LTDC_INFO.hsync - 1).vsh().bits(LTDC_INFO.vsync - 1) });
-        ltdc.bpcr.write(|w| unsafe { w.ahbp().bits(LTDC_INFO.hsync + LTDC_INFO.hbp - 1).avbp().bits(LTDC_INFO.vsync + LTDC_INFO.vbp - 1) });
-        ltdc.awcr.write(|w| unsafe { w.aaw().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 1).aah().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 1) });
-        ltdc.twcr.write(|w| unsafe { w.totalw().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw + LTDC_INFO.hfp - 1).totalh().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah + LTDC_INFO.vfp - 1) });
+        ltdc.sscr.write(|w| { w.hsw().bits(LTDC_INFO.hsync - 1).vsh().bits(LTDC_INFO.vsync - 1) });
+        ltdc.bpcr.write(|w| { w.ahbp().bits(LTDC_INFO.hsync + LTDC_INFO.hbp - 1).avbp().bits(LTDC_INFO.vsync + LTDC_INFO.vbp - 1) });
+        ltdc.awcr.write(|w| { w.aaw().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 1).aah().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 1) });
+        ltdc.twcr.write(|w| { w.totalw().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw + LTDC_INFO.hfp - 1).totalh().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah + LTDC_INFO.vfp - 1) });
 
-        ltdc.gcr.write(|w| { w.hspol().bit(false).vspol().bit(false).depol().bit(false).pcpol().bit(false) });
+        ltdc.gcr.write(|w| { w.hspol().active_low().vspol().active_low().depol().active_low().pcpol().active_low() });
 
         // enable line interrupt
-        ltdc.lipcr.write(|w| unsafe { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16) });
-        ltdc.ier.write(|w| { w.lie().bit(true) });
+        ltdc.lipcr.write(|w| { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16) });
+        ltdc.ier.write(|w| { w.lie().enabled() });
 
         // enable the LTDC peripheral
-        ltdc.gcr.modify(|_, w| { w.ltdcen().bit(true) });
+        ltdc.gcr.modify(|_, w| { w.ltdcen().enabled() });
 
         // enable the screen and turn on the backlight
         gpioi.bsrr.write(|w| { w.bs12().bit(true) });
@@ -471,7 +416,6 @@ fn main() -> ! {
 
         *GLTDC.borrow(cs).borrow_mut() = Some(ltdc);
         unsafe { NVIC::unmask(Interrupt::LTDC); }
-
     });
 
     loop {
@@ -488,8 +432,7 @@ fn LTDC() {
     let ltdc = LTDC.get_or_insert_with(|| {
         cortex_m::interrupt::free(|cs| GLTDC.borrow(cs).replace(None).unwrap())
     });
-    if !ltdc.isr.read().lif().bit() { return; }
-    ltdc.icr.write(|w| { w.clif().bit(true) });
+    ltdc.icr.write(|w| { w.clif().clear() });
 
     match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
         LTDCState::Uninitialised => {
@@ -497,37 +440,27 @@ fn LTDC() {
             // configure layers
 
             // set background colour
-            ltdc.bccr.write(|w| unsafe { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
+            ltdc.bccr.write(|w| { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
 
             // x, y
-            ltdc.layer1.whpcr.write(|w| unsafe { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + 10).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 11) });
-            ltdc.layer1.wvpcr.write(|w| unsafe { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + 10).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 11) });
+            ltdc.layer1.whpcr.write(|w| { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + 10).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 11) });
+            ltdc.layer1.wvpcr.write(|w| { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + 10).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 11) });
             // format
             // TODO: make enumerated values
-            ltdc.layer1.pfcr.write(|w| unsafe { w.pf().bits(0b101) });
+            ltdc.layer1.pfcr.write(|w| { w.pf().l8() });
             // framebuffer
-            ltdc.layer1.cfbar.write(|w| unsafe { w.cfbadd().bits(&*FB as *const u8 as u32) });
+            ltdc.layer1.cfbar.write(|w| { w.cfbadd().bits(&*FB as *const u8 as u32) });
             // line length, pitch
-            ltdc.layer1.cfblr.write(|w| unsafe { w.cfbll().bits((FB_W + 3).try_into().unwrap()).cfbp().bits(FB_W.try_into().unwrap()) });
+            ltdc.layer1.cfblr.write(|w| { w.cfbll().bits((FB_W + 3).try_into().unwrap()).cfbp().bits(FB_W.try_into().unwrap()) });
             // number of lines
-            ltdc.layer1.cfblnr.write(|w| unsafe { w.cfblnbr().bits(FB_H.try_into().unwrap()) });
+            ltdc.layer1.cfblnr.write(|w| { w.cfblnbr().bits(FB_H.try_into().unwrap()) });
             // blending mode
-            ltdc.layer1.bfcr.write(|w| unsafe { w.bf1().bits(0b110).bf2().bits(0b111) });
-            ltdc.layer1.cr.write(|w| { w.len().bit(true) });
-
-            ltdc.layer2.bfcr.write(|w| unsafe { w.bf1().bits(0b110).bf2().bits(0b111) });
-            ltdc.layer2.cr.write(|w| { w.len().bit(false) });
+            ltdc.layer1.bfcr.write(|w| { w.bf1().constant().bf2().constant() });
+            ltdc.layer1.cr.write(|w| { w.len().enabled() });
 
             // reload shadow registers immediately
-            ltdc.srcr.write(|w| { w.imr().bit(true) });
-            #[cfg(debug_assertions)]
-            hprintln!("Requested LCD register reload immediately").unwrap();
-            {
-                let mut i: u32 = 0;
-                while ltdc.srcr.read().imr().bit() { i += 1; }
-                #[cfg(debug_assertions)]
-                hprintln!("LCD register reloaded after {} iters", i).unwrap();
-            }
+            ltdc.srcr.write(|w| { w.imr().reload() });
+            while ltdc.srcr.read().imr().is_reload() { }
 
             cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
         },
@@ -537,7 +470,7 @@ fn LTDC() {
             let c_a = (coeff * cos) >> Q;
             let c_b = (coeff * sin) >> Q;
             let compute_value = |pixel_x, pixel_y| {
-                let fb_size = min(FB_W, FB_H) as i32;
+                let fb_size = core::cmp::min(FB_W, FB_H) as i32;
                 let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
                 let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
                 const ITER_MAX: i32 = 32;
@@ -572,7 +505,7 @@ fn LTDC() {
                     if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
                         break;
                     }
-                    if ltdc.isr.read().lif().bit() {
+                    if ltdc.isr.read().lif().is_reached() {
                         for pixel_x in 0..FB_W {
                             fb[pixel_y * FB_W + pixel_x] = 222;
                         }
