@@ -9,11 +9,7 @@ version = "0.1.0"
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.10"
 panic-halt = "0.2.0"
-
-[dependencies.stm32f7]
-path = "../stm32-rs/stm32f7"
-features = ["stm32f750", "rt"]
-version = "*"
+stm32f7 = { version = "0.13.0", features = ["stm32f750", "rt"] }
 
 [[bin]]
 name = "stm32f7508-dk-julia"
