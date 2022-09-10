@@ -10,6 +10,7 @@ cortex-m = "0.7"
 cortex-m-rt = "0.6.10"
 panic-halt = "0.2.0"
 stm32f7 = { version = "0.13.0", features = ["stm32f750", "rt"] }
+demos = { path = "../demos" }
 
 [[bin]]
 name = "stm32f7508-dk-julia"

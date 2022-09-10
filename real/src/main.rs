@@ -10,34 +10,6 @@ use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
 
-const Q: i32 = 10;
-
-fn sin_internal(offset: i32) -> i32 {
-    assert!(offset >= 0 && offset <= (1<<Q));
-    match Q {
-        8 => offset * ((3<<16) - offset*offset) >> 17,
-        9 => offset * ((3<<18) - offset*offset) >> 19,
-        10 => (offset>>1) * ((3<<18) - (offset>>1)*(offset>>1)) >> 18,
-        11 => (offset>>2) * ((3<<18) - (offset>>2)*(offset>>2)) >> 17,
-        12 => (offset>>3) * ((3<<18) - (offset>>3)*(offset>>3)) >> 16,
-        13 => (offset>>4) * ((3<<18) - (offset>>4)*(offset>>4)) >> 15,
-        _ => unreachable!()
-    }
-}
-
-fn cos_sin(theta: i32) -> (i32, i32) {
-    assert!(theta >= 0 && theta <= (4<<Q));
-    if theta <= 1<<Q {
-        (sin_internal((1<<Q) - theta), sin_internal(theta))
-    } else if theta <= 2<<Q {
-        (-sin_internal(theta - (1<<Q)), sin_internal((2<<Q) - theta))
-    } else if theta <= 3<<Q {
-        (-sin_internal((3<<Q) - theta), -sin_internal(theta - (2<<Q)))
-    } else {
-        (sin_internal(theta - (3<<Q)), -sin_internal((4<<Q) - theta))
-    }
-}
-
 static GLTDC: Mutex<RefCell<Option<LTDC>>> = Mutex::new(RefCell::new(None));
 
 struct LTDCInfo {
@@ -73,7 +45,6 @@ static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState
 const BORDER: usize = 10;
 const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
 const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
-const FRAME_MAX: u32 = 300;
 
 #[entry]
 fn main() -> ! {
@@ -473,16 +444,57 @@ fn cie_lch_to_rgb(l: i32, c: i32, h: i32) -> (i32, i32, i32) {
 }
 */
 
+struct ContextS<'a> {
+    fb: &'a mut [u8],
+    ltdc: &'a mut LTDC,
+    fb_w: usize,
+    fb_h: usize,
+}
+
+impl<'a> demos::Context for ContextS<'a> {
+    fn fb_h(&self) -> usize {
+        self.fb_h
+    }
+    fn fb_w(&self) -> usize {
+        self.fb_w
+    }
+    fn fb(&mut self) -> &mut [u8] {
+        self.fb
+    }
+    fn wait_for_line(&mut self, pixel_y: usize) {
+        loop {
+            if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
+                break;
+            }
+            if self.ltdc.isr.read().lif().is_reached() {
+                for pixel_x in 0..FB_W {
+                    self.fb[pixel_y * FB_W + pixel_x] = 222;
+                }
+                panic!("Timed out on line {}", pixel_y);
+            }
+            // It is a mystery why this helps. But it helps significantly.
+            cortex_m::asm::nop();
+        }
+    }
+    fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
+        self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
+    }
+}
+
 #[interrupt]
 fn LTDC() {
     static mut LTDC: Option<LTDC> = None;
     static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
-    static mut FRAME: u32 = 0;
+    static mut STATE: Option<demos::Julia> = None;
 
     let ltdc = LTDC.get_or_insert_with(|| {
         cortex_m::interrupt::free(|cs| GLTDC.borrow(cs).replace(None).unwrap())
     });
     ltdc.icr.write(|w| { w.clif().clear() });
+
+    let state = STATE.get_or_insert_with(|| {
+        demos::Julia::new()
+    });
 
     match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
         LTDCState::Uninitialised => {
@@ -515,141 +527,9 @@ fn LTDC() {
             cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
         },
         LTDCState::Initialised => {
-            let coeff = (0.7885 * (1<<Q) as f32) as i32;
-            let (cos, sin) = cos_sin(((4 * *FRAME as i32) << Q) / FRAME_MAX as i32);
-            let c_a = (coeff * cos) >> Q;
-            let c_b = (coeff * sin) >> Q;
-            let compute_value = |pixel_x, pixel_y| {
-                let fb_size = core::cmp::min(FB_W, FB_H) as i32;
-                let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
-                let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-                const ITER_MAX: i32 = 32;
-                let mut final_iter = ITER_MAX<<Q;
-                let mut prev_dist = -40<<Q;
-
-                for iter in 0..ITER_MAX {
-                    let a2 = a*a >> Q;
-                    let b2 = b*b >> Q;
-                    let this_dist = a2+b2;
-                    if this_dist >= (4<<Q) {
-                        let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
-                        final_iter = (iter << Q) - lerp;
-                        break;
-                    }
-                    let two_ab = a*b >> (Q-1);
-                    a = a2 - b2 + c_a;
-                    b = two_ab + c_b;
-                    prev_dist = this_dist;
-                }
-                ((final_iter * 255) / (ITER_MAX << Q)) as u8
-            };
-            let average_value = |fb: &[u8], pixel_x, pixel_y| {
-                ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
-                  + fb[(pixel_y+1) * FB_W + pixel_x] as u32
-                  + fb[(pixel_y+0) * FB_W + pixel_x-1] as u32
-                  + fb[(pixel_y+0) * FB_W + pixel_x+1] as u32)
-                 / 4) as u8
-            };
-            let wait_for_line = |fb: &mut [u8], pixel_y: usize| {
-                loop {
-                    if ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
-                        break;
-                    }
-                    if ltdc.isr.read().lif().is_reached() {
-                        for pixel_x in 0..FB_W {
-                            fb[pixel_y * FB_W + pixel_x] = 222;
-                        }
-                        panic!("Timed out on line {}", pixel_y);
-                    }
-                    // It is a mystery why this helps. But it helps significantly.
-                    cortex_m::asm::nop();
-                }
-            };
-            for i in 0x00u32..=0xFFu32 {
-                let h = (((*FRAME * 360))/FRAME_MAX + i) % 360;
-                let s = if i < 0xFF { 256-i } else { i };
-                let (_, sin) = cos_sin((2*i << Q) as i32 / 256);
-                let v = ((sin * 256) >> Q) as u32;
-
-                let h_sector = h / 60;
-                let h_frac = h % 60;
-
-                let p = v * ( 256 - s ) / 256;
-                let q = v * ( 256*60 - s * h_frac ) / (256*60);
-                let t = v * ( 256*60 - s * ( 60 - h_frac ) ) / (256*60);
-
-                let (r, g, b) = match h_sector {
-                    0 => (v, t, p),
-                    1 => (q, v, p),
-                    2 => (p, v, t),
-                    3 => (p, q, v),
-                    4 => (t, p, v),
-                    5 => (v, p, q),
-                    _ => unreachable!()
-                };
-                let clamp = |x: u32| { if x > 255 { 255 } else { x } };
-                let r = clamp(r);
-                let g = clamp(g);
-                let b = clamp(b);
-                ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
-            }
-            {
-                let pixel_y = 0;
-                wait_for_line(&mut *FB, pixel_y);
-                for pixel_x in 0..FB_W {
-                    let value = compute_value(pixel_x, pixel_y);
-                    (*FB)[pixel_y * FB_W + pixel_x] = value;
-                }
-            }
-            for pixel_y in 1..FB_H/2+1 {
-                wait_for_line(&mut *FB, pixel_y);
-                if pixel_y < FB_H/2 {
-                    let mut pixel_x = pixel_y & 1;
-                    while pixel_x < FB_W {
-                        let value = compute_value(pixel_x, pixel_y);
-                        (*FB)[pixel_y * FB_W + pixel_x] = value;
-                        pixel_x += 2;
-                    }
-                }
-                if pixel_y >= 2 {
-                    let pixel_y = pixel_y - 1;
-                    let mut pixel_x = (pixel_y & 1) ^ 1;
-                    while pixel_x < FB_W {
-                        let value = average_value(&*FB, pixel_x, pixel_y);
-                        (*FB)[pixel_y * FB_W + pixel_x] = value;
-                        pixel_x += 2;
-                    }
-                }
-            }
-            {
-                let pixel_y = FB_H/2;
-                wait_for_line(&mut *FB, pixel_y);
-                let mut pixel_x = pixel_y & 1;
-                while pixel_x < FB_W {
-                    (*FB)[pixel_y * FB_W + pixel_x] = (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
-                    pixel_x += 2;
-                }
-            }
-            {
-                let pixel_y = FB_H/2-1;
-                let mut pixel_x = (pixel_y & 1) ^ 1;
-                while pixel_x < FB_W {
-                    let value = average_value(&*FB, pixel_x, pixel_y);
-                    (*FB)[pixel_y * FB_W + pixel_x] = value;
-                    (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1] = value;
-                    pixel_x += 2;
-                }
-            }
-            for pixel_y in FB_H/2+1..FB_H {
-                wait_for_line(&mut *FB, pixel_y);
-                for pixel_x in 0..FB_W {
-                    (*FB)[pixel_y * FB_W + pixel_x] = (*FB)[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
-                }
-            }
-            *FRAME += 1;
-            if *FRAME >= FRAME_MAX {
-                *FRAME = 0;
-            }
+            let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
+            use demos::Demo;
+            state.render(&mut context);
         },
     }
     assert!(!ltdc.isr.read().lif().bit());
