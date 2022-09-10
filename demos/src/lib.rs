@@ -8,6 +8,14 @@ pub fn fb() -> &'static mut [u8; FB_W*FB_H] {
     unsafe { &mut FB }
 }
 
+#[cfg_attr(feature="real", link_section = ".priority")]
+static mut INVERSES: [f32; 32*256] = [0f32; 32*256];
+
+#[inline(always)]
+pub fn inverses() -> &'static mut [f32; 32*256] {
+    unsafe { &mut INVERSES }
+}
+
 pub trait Context {
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
@@ -36,7 +44,7 @@ pub const FB_W: usize = 480;
 pub const FB_H: usize = 272;
 
 const Q: i32 = 10;
-const FRAME_MAX: u32 = 300;
+const FRAME_MAX: u32 = 1000;
 
 fn sin_internal(offset: i32) -> i32 {
     assert!(offset >= 0 && offset <= (1<<Q));
@@ -70,17 +78,21 @@ pub struct Julia {
 
 impl Julia {
     pub fn new() -> Self {
+        for x in 0..32*256 {
+            inverses()[x] = (1 << (Q-2)) as f32 / (x as f32);
+        }
         Self { frame: 0 }
     }
 
     #[inline(always)]
     fn compute_value_hot(&self, context: &mut dyn Context, pixel_x: usize, pixel_y: usize, c_a: i32, c_b: i32) -> u8 {
-        let fb_size = core::cmp::min(FB_W, FB_H) as i32;
-        let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
-        let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-        const ITER_MAX: i32 = 36;
+        let mut a = (((pixel_x as i32)<<1) - (FB_W as i32)) << (Q-8);
+        let mut b = (((pixel_y as i32)<<1) - (FB_H as i32)) << (Q-8);
+        const ITER_MAX: i32 = 12;
         let mut final_iter = ITER_MAX<<Q;
-        let mut prev_dist = -40<<Q;
+        let mut prev_dist = -120<<Q;
+
+        const MAX_DIST_SQR: i32 = 32;
 
         for iter in 0..ITER_MAX {
             context.stats_count_muls(1);
@@ -95,12 +107,12 @@ impl Julia {
             let this_dist = a2+b2;
 
             context.stats_count_cmps(1);
-            if this_dist >= (4<<Q) {
+            if this_dist >= (MAX_DIST_SQR<<Q) {
 
                 context.stats_count_adds(2);
                 context.stats_count_shrs(2);
                 context.stats_count_divs(1);
-                let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
+                let lerp = ((this_dist - (MAX_DIST_SQR<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
 
                 context.stats_count_adds(1);
                 context.stats_count_shrs(1);
@@ -108,15 +120,47 @@ impl Julia {
                 break;
             }
 
+            context.stats_count_shrs(1);
+            context.stats_count_cmps(1);
+            if this_dist >> (Q-5) == 0 {
+                break;
+            }
+
+            let mut div_dist = |x| {
+                context.stats_count_fcvts(2);
+                context.stats_count_fmuls(1);
+                context.stats_count_mems(1);
+                context.stats_count_shrs(1);
+                ((x as f32) * inverses()[(this_dist>>2) as usize]) as i32
+
+                /*
+                context.stats_count_shrs(2);
+                context.stats_count_divs(1);
+                (x<<(Q-2)) / (this_dist>>2)
+                */
+            };
+            let ai = div_dist(a);
+            let bi = div_dist(b);
+            //eprintln!("{}/{} = {}", a, this_dist>>2, ai);
+            //eprintln!("{}/{} = {}", b, this_dist>>2, bi);
+
             context.stats_count_muls(1);
             context.stats_count_shrs(1);
-            let two_ab = a*b >> (Q-1);
+            let two_aibi = ai*bi >> (Q-1);
+
+            context.stats_count_muls(1);
+            context.stats_count_shrs(1);
+            let ai2 = ai*ai >> Q;
+
+            context.stats_count_muls(1);
+            context.stats_count_shrs(1);
+            let bi2 = bi*bi >> Q;
 
             context.stats_count_adds(2);
-            a = a2 - b2 + c_a;
+            a = ai2 - bi2 + c_a;
 
-            context.stats_count_adds(1);
-            b = two_ab + c_b;
+            context.stats_count_adds(2);
+            b = -two_aibi + c_b;
 
             prev_dist = this_dist;
         }
@@ -128,6 +172,12 @@ impl Julia {
         self.compute_value_hot(context, pixel_x, pixel_y, c_a, c_b)
     }
 }
+
+/* complex exponentiation by -2:
+    float bmag2 = dot(b, b);
+    vec2 binv = b/vec2(bmag2);
+    return vec2((binv.x*binv.x - binv.y*binv.y), -2.*binv.x*binv.y);
+*/
 
 impl Demo for Julia {
     fn pre_render(&mut self, context: &mut dyn Context) {
@@ -160,16 +210,19 @@ impl Demo for Julia {
             context.set_lut(i as u8, r as u8, g as u8, b as u8);
         }
     }
+
+    #[inline(always)]
     fn render(&mut self, context: &mut dyn Context) {
         self.frame += 1;
+        if self.frame == 5 { self.frame = 220; }
         if self.frame >= FRAME_MAX {
             self.frame = 0;
         }
 
         let coeff = (0.7885 * (1<<Q) as f32) as i32;
         let (cos, sin) = cos_sin(((4 * self.frame as i32) << Q) / FRAME_MAX as i32);
-        let c_a = (coeff * cos) >> Q;
-        let c_b = (coeff * sin) >> Q;
+        let c_a = (coeff * cos * cos.abs()) >> (2*Q);
+        let c_b = (coeff * sin * sin.abs()) >> (2*Q);
         let average_value = |fb: &[u8; FB_W*FB_H], pixel_x, pixel_y| {
             ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
               + fb[(pixel_y+1) * FB_W + pixel_x] as u32

@@ -100,9 +100,9 @@ fn main() -> ! {
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
         // 50 <= PLLSAIN <= 432
         // 2 <= PLLSAIR <= 7
-        let pllsain = 54;
-        let pllsair = 5;
-        let pllsaidivr = 4;
+        let pllsain = 69;
+        let pllsair = 7;
+        let pllsaidivr = 8;
         rcc.pllsaicfgr.write(|w| unsafe {
             w.pllsain().bits(pllsain).pllsair().bits(pllsair)
         });
@@ -129,6 +129,10 @@ fn main() -> ! {
         // Switch system clock
         rcc.cfgr.write(|w| { w.sw().pll().ppre1().div4().ppre2().div2() });
         while !rcc.cfgr.read().sws().is_pll() { }
+
+
+        *GSTATE.borrow(cs).borrow_mut() = Some(demos::Julia::new());
+
 
         //////////////////////////////////////////////////////////////////////////
         // configure the LCD GPIO pins
@@ -396,7 +400,6 @@ fn main() -> ! {
         gpiok.bsrr.write(|w| { w.bs3().bit(true) });
 
         *GLTDC.borrow(cs).borrow_mut() = Some(ltdc);
-        *GSTATE.borrow(cs).borrow_mut() = Some(demos::Julia::new());
         unsafe { NVIC::unmask(Interrupt::LTDC); }
     });
 
