@@ -89,15 +89,25 @@ pub fn main() {
             };
             use demos::Demo;
             state.render(&mut context);
-            println!("{}",
-                     1*context.adds +
+            let scale = 100000;
+            println!("{:4} +{:4} >{:4} >>{:4} *{:4} []{:4} /{:4} fi{:4} f*{:4}",
+                     (1*context.adds +
                      1*context.cmps +
                      1*context.shrs +
                      1*context.muls +
                      2*context.mems +
                      10*context.divs +
                      1*context.fcvts +
-                     3*context.fmuls);
+                     3*context.fmuls) / scale,
+
+                     (1*context.adds)/scale,
+                     (1*context.cmps)/scale,
+                     (1*context.shrs)/scale,
+                     (1*context.muls)/scale,
+                     (2*context.mems)/scale,
+                     (10*context.divs)/scale,
+                     (1*context.fcvts)/scale,
+                     (3*context.fmuls)/scale);
         }
 
         for y in 0..FB_H {
