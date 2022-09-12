@@ -9,11 +9,11 @@ pub fn fb() -> &'static mut [u8; FB_W*FB_H] {
 }
 
 #[cfg_attr(feature="real", link_section = ".priority")]
-static mut INVERSES: [f32; 32*256] = [0f32; 32*256];
+static mut INVERSES2: [f32; 32*256] = [0f32; 32*256];
 
 #[inline(always)]
-pub fn inverses() -> &'static mut [f32; 32*256] {
-    unsafe { &mut INVERSES }
+pub fn inverses2() -> &'static mut [f32; 32*256] {
+    unsafe { &mut INVERSES2 }
 }
 
 pub trait Context {
@@ -79,7 +79,8 @@ pub struct Julia {
 impl Julia {
     pub fn new() -> Self {
         for x in 0..32*256 {
-            inverses()[x] = (1 << (Q-2)) as f32 / (x as f32);
+            let inv = (1 << (Q-2)) as f32 / (x as f32);
+            inverses2()[x] = inv * inv;
         }
         Self { frame: 0 }
     }
@@ -124,7 +125,7 @@ impl Julia {
                 break;
             }
 
-            let mut div_dist = |x| {
+            let div_dist2 = |context: &mut dyn Context, x| {
                 context.stats_count_fcvts(2);
                 context.stats_count_fmuls(1);
                 context.stats_count_mems(1);
@@ -135,36 +136,19 @@ impl Julia {
                         core::hint::unreachable_unchecked();
                     }
                 }
-                ((x as f32) * inverses()[index]) as i32
-
-                /*
-                context.stats_count_shrs(2);
-                context.stats_count_divs(1);
-                (x<<(Q-2)) / (this_dist>>2)
-                */
+                ((x as f32) * inverses2()[index]) as i32
             };
-            let ai = div_dist(a);
-            let bi = div_dist(b);
-            //eprintln!("{}/{} = {}", a, this_dist>>2, ai);
-            //eprintln!("{}/{} = {}", b, this_dist>>2, bi);
 
             context.stats_count_muls(1);
             context.stats_count_shrs(1);
-            let two_aibi = ai*bi >> (Q-1);
-
-            context.stats_count_muls(1);
-            context.stats_count_shrs(1);
-            let ai2 = ai*ai >> Q;
-
-            context.stats_count_muls(1);
-            context.stats_count_shrs(1);
-            let bi2 = bi*bi >> Q;
+            let two_aibi = div_dist2(context, a*b) >> (Q-1);
 
             context.stats_count_adds(2);
-            a = ai2 - bi2 + c_a;
+            context.stats_count_shrs(1);
+            a = ((div_dist2(context, a2qq - b2qq)) >> Q) + c_a;
 
             context.stats_count_adds(1);
-            b = -two_aibi + c_b;
+            b = c_b - two_aibi;
 
             prev_distqq = this_distqq;
         }
