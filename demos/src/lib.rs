@@ -6,6 +6,14 @@ pub trait Context {
     fn fb(&mut self) -> &mut [u8];
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
+    fn stats_count_adds(&mut self, n: usize);
+    fn stats_count_cmps(&mut self, n: usize);
+    fn stats_count_shrs(&mut self, n: usize);
+    fn stats_count_muls(&mut self, n: usize);
+    fn stats_count_mems(&mut self, n: usize);
+    fn stats_count_divs(&mut self, n: usize);
+    fn stats_count_fcvts(&mut self, n: usize);
+    fn stats_count_fmuls(&mut self, n: usize);
 }
 
 pub trait Demo {
@@ -59,7 +67,7 @@ impl Demo for Julia {
         let (cos, sin) = cos_sin(((4 * self.frame as i32) << Q) / FRAME_MAX as i32);
         let c_a = (coeff * cos) >> Q;
         let c_b = (coeff * sin) >> Q;
-        let compute_value = |pixel_x, pixel_y| {
+        let compute_value = |context: &mut dyn Context, pixel_x, pixel_y| {
             let fb_size = core::cmp::min(fb_w, fb_h) as i32;
             let mut a = (((pixel_x as i32) << Q) - ((fb_w as i32 - 1) << (Q-1))) * 2 / fb_size;
             let mut b = (((pixel_y as i32) << Q) - ((fb_h as i32 - 1) << (Q-1))) * 2 / fb_size;
@@ -68,17 +76,41 @@ impl Demo for Julia {
             let mut prev_dist = -40<<Q;
 
             for iter in 0..ITER_MAX {
+                context.stats_count_muls(1);
+                context.stats_count_shrs(1);
                 let a2 = a*a >> Q;
+
+                context.stats_count_muls(1);
+                context.stats_count_shrs(1);
                 let b2 = b*b >> Q;
+
+                context.stats_count_adds(1);
                 let this_dist = a2+b2;
+
+                context.stats_count_cmps(1);
                 if this_dist >= (4<<Q) {
+
+                    context.stats_count_adds(2);
+                    context.stats_count_shrs(2);
+                    context.stats_count_divs(1);
                     let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
+
+                    context.stats_count_adds(1);
+                    context.stats_count_shrs(1);
                     final_iter = (iter << Q) - lerp;
                     break;
                 }
+
+                context.stats_count_muls(1);
+                context.stats_count_shrs(1);
                 let two_ab = a*b >> (Q-1);
+
+                context.stats_count_adds(2);
                 a = a2 - b2 + c_a;
+
+                context.stats_count_adds(1);
                 b = two_ab + c_b;
+
                 prev_dist = this_dist;
             }
             ((final_iter * 255) / (ITER_MAX << Q)) as u8
@@ -122,7 +154,7 @@ impl Demo for Julia {
             let pixel_y = 0;
             context.wait_for_line(pixel_y);
             for pixel_x in 0..fb_w {
-                let value = compute_value(pixel_x, pixel_y);
+                let value = compute_value(context, pixel_x, pixel_y);
                 context.fb()[pixel_y * fb_w + pixel_x] = value;
             }
         }
@@ -131,7 +163,7 @@ impl Demo for Julia {
             if pixel_y < fb_h/2 {
                 let mut pixel_x = pixel_y & 1;
                 while pixel_x < fb_w {
-                    let value = compute_value(pixel_x, pixel_y);
+                    let value = compute_value(context, pixel_x, pixel_y);
                     context.fb()[pixel_y * fb_w + pixel_x] = value;
                     pixel_x += 2;
                 }

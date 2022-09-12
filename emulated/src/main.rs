@@ -10,6 +10,14 @@ const FB_H: usize = 272;
 struct ContextS<'a> {
     fb: &'a mut [u8],
     lut: &'a mut [(u8, u8, u8)],
+    adds: usize,
+    cmps: usize,
+    shrs: usize,
+    muls: usize,
+    mems: usize,
+    divs: usize,
+    fcvts: usize,
+    fmuls: usize,
 }
 
 impl<'a> demos::Context for ContextS<'a> {
@@ -27,6 +35,14 @@ impl<'a> demos::Context for ContextS<'a> {
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
         self.lut[i as usize] = (r, g, b);
     }
+    fn stats_count_adds(&mut self, n: usize) { self.adds += n; }
+    fn stats_count_cmps(&mut self, n: usize) { self.cmps += n; }
+    fn stats_count_shrs(&mut self, n: usize) { self.shrs += n; }
+    fn stats_count_muls(&mut self, n: usize) { self.muls += n; }
+    fn stats_count_mems(&mut self, n: usize) { self.mems += n; }
+    fn stats_count_divs(&mut self, n: usize) { self.divs += n; }
+    fn stats_count_fcvts(&mut self, n: usize) { self.fcvts += n; }
+    fn stats_count_fmuls(&mut self, n: usize) { self.fmuls += n; }
 }
 
 pub fn main() {
@@ -59,9 +75,29 @@ pub fn main() {
         }
 
         {
-            let mut context = ContextS { fb: &mut fb, lut: &mut lut };
+            let mut context = ContextS {
+                fb: &mut fb,
+                lut: &mut lut,
+                adds: 0,
+                cmps: 0,
+                shrs: 0,
+                muls: 0,
+                mems: 0,
+                divs: 0,
+                fcvts: 0,
+                fmuls: 0,
+            };
             use demos::Demo;
             state.render(&mut context);
+            println!("{}",
+                     1*context.adds +
+                     1*context.cmps +
+                     1*context.shrs +
+                     1*context.muls +
+                     2*context.mems +
+                     10*context.divs +
+                     1*context.fcvts +
+                     3*context.fmuls);
         }
 
         for y in 0..FB_H {

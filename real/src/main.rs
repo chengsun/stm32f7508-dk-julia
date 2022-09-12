@@ -479,6 +479,14 @@ impl<'a> demos::Context for ContextS<'a> {
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
         self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
     }
+    fn stats_count_adds(&mut self, _: usize) {}
+    fn stats_count_cmps(&mut self, _: usize) {}
+    fn stats_count_shrs(&mut self, _: usize) {}
+    fn stats_count_muls(&mut self, _: usize) {}
+    fn stats_count_mems(&mut self, _: usize) {}
+    fn stats_count_divs(&mut self, _: usize) {}
+    fn stats_count_fcvts(&mut self, _: usize) {}
+    fn stats_count_fmuls(&mut self, _: usize) {}
 }
 
 #[interrupt]
