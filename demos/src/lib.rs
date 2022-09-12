@@ -90,29 +90,27 @@ impl Julia {
         let mut b = (((pixel_y as i32)<<1) - (FB_H as i32)) << (Q-8);
         const ITER_MAX: i32 = 12;
         let mut final_iter = ITER_MAX<<Q;
-        let mut prev_dist = -120<<Q;
+        let mut prev_distqq = -120<<(2*Q);
 
         const MAX_DIST_SQR: i32 = 32;
 
         for iter in 0..ITER_MAX {
             context.stats_count_muls(1);
-            context.stats_count_shrs(1);
-            let a2 = a*a >> Q;
+            let a2qq = a*a;
 
             context.stats_count_muls(1);
-            context.stats_count_shrs(1);
-            let b2 = b*b >> Q;
+            let b2qq = b*b;
 
             context.stats_count_adds(1);
-            let this_dist = a2+b2;
+            let this_distqq = a2qq+b2qq;
 
             context.stats_count_cmps(1);
-            if this_dist >= (MAX_DIST_SQR<<Q) {
+            if this_distqq >= (MAX_DIST_SQR<<(2*Q)) {
 
                 context.stats_count_adds(2);
                 context.stats_count_shrs(2);
                 context.stats_count_divs(1);
-                let lerp = ((this_dist - (MAX_DIST_SQR<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
+                let lerp = ((this_distqq - (MAX_DIST_SQR<<(2*Q))) >> (Q-8)) / ((this_distqq - prev_distqq) >> (2*Q-8));
 
                 context.stats_count_adds(1);
                 context.stats_count_shrs(1);
@@ -122,7 +120,7 @@ impl Julia {
 
             context.stats_count_shrs(1);
             context.stats_count_cmps(1);
-            if this_dist >> (Q-5) == 0 {
+            if this_distqq >> (2*Q-5) == 0 {
                 break;
             }
 
@@ -131,7 +129,7 @@ impl Julia {
                 context.stats_count_fmuls(1);
                 context.stats_count_mems(1);
                 context.stats_count_shrs(1);
-                ((x as f32) * inverses()[(this_dist>>2) as usize]) as i32
+                ((x as f32) * inverses()[(this_distqq>>(Q+2)) as usize]) as i32
 
                 /*
                 context.stats_count_shrs(2);
@@ -159,10 +157,10 @@ impl Julia {
             context.stats_count_adds(2);
             a = ai2 - bi2 + c_a;
 
-            context.stats_count_adds(2);
+            context.stats_count_adds(1);
             b = -two_aibi + c_b;
 
-            prev_dist = this_dist;
+            prev_distqq = this_distqq;
         }
         ((final_iter * 255) / (ITER_MAX << Q)) as u8
     }
