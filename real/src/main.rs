@@ -12,6 +12,7 @@ use cortex_m_rt::entry;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
 
 static GLTDC: Mutex<RefCell<Option<LTDC>>> = Mutex::new(RefCell::new(None));
+static GSTATE: Mutex<RefCell<Option<demos::Julia>>> = Mutex::new(RefCell::new(None));
 
 struct LTDCInfo {
     hsync: u16,
@@ -387,6 +388,7 @@ fn main() -> ! {
         gpiok.bsrr.write(|w| { w.bs3().bit(true) });
 
         *GLTDC.borrow(cs).borrow_mut() = Some(ltdc);
+        *GSTATE.borrow(cs).borrow_mut() = Some(demos::Julia::new());
         unsafe { NVIC::unmask(Interrupt::LTDC); }
     });
 
@@ -509,7 +511,7 @@ fn LTDC() {
     ltdc.icr.write(|w| { w.clif().clear() });
 
     let state = STATE.get_or_insert_with(|| {
-        demos::Julia::new()
+        cortex_m::interrupt::free(|cs| GSTATE.borrow(cs).replace(None).unwrap())
     });
 
     match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
