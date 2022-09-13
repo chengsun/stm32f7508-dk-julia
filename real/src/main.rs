@@ -43,7 +43,7 @@ enum LTDCState {
 
 static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState::Uninitialised));
 
-const BORDER: usize = 10;
+const BORDER: usize = 0;
 const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
 const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
 

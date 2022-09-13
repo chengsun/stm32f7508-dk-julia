@@ -113,7 +113,7 @@ impl Demo for Julia {
             let fb_size = core::cmp::min(fb_w, fb_h) as i32;
             let mut a = (((pixel_x as i32) << Q) - ((fb_w as i32 - 1) << (Q-1))) * 2 / fb_size;
             let mut b = (((pixel_y as i32) << Q) - ((fb_h as i32 - 1) << (Q-1))) * 2 / fb_size;
-            const ITER_MAX: i32 = 44;
+            const ITER_MAX: i32 = 36;
             let mut final_iter = ITER_MAX<<Q;
             let mut prev_dist = -40<<Q;
 
