@@ -477,6 +477,9 @@ impl<'a> demos::Context for ContextS<'a> {
         }
     }
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
+        if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp {
+            panic!("Timed out setting LUT");
+        }
         self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
     }
     fn stats_count_adds(&mut self, _: usize) {}
