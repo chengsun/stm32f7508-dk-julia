@@ -17,6 +17,13 @@ pub trait Context {
 }
 
 pub trait Demo {
+    /// Called as soon as possible once the vertical blanking period before
+    /// frame F starts getting read out and frame F+1 starts getting computed by
+    /// render. Use to set up the colour LUT for frame F.
+    fn pre_render(&mut self, context: &mut dyn Context);
+
+    /// Called as soon as possible once the active area starts (and hence frame
+    /// F is getting read out). Use to render frame F+1.
     fn render(&mut self, context: &mut dyn Context);
 }
 
@@ -60,7 +67,42 @@ impl Julia {
 }
 
 impl Demo for Julia {
+    fn pre_render(&mut self, context: &mut dyn Context) {
+        for i in 0x00u32..=0xFFu32 {
+            let h = (((self.frame * 360))/FRAME_MAX + i) % 360;
+            let s = if i < 0xFF { 256-i } else { i };
+            let (_, sin) = cos_sin((2*i << Q) as i32 / 256);
+            let v = ((sin * 256) >> Q) as u32;
+
+            let h_sector = h / 60;
+            let h_frac = h % 60;
+
+            let p = v * ( 256 - s ) / 256;
+            let q = v * ( 256*60 - s * h_frac ) / (256*60);
+            let t = v * ( 256*60 - s * ( 60 - h_frac ) ) / (256*60);
+
+            let (r, g, b) = match h_sector {
+                0 => (v, t, p),
+                1 => (q, v, p),
+                2 => (p, v, t),
+                3 => (p, q, v),
+                4 => (t, p, v),
+                5 => (v, p, q),
+                _ => unreachable!()
+            };
+            let clamp = |x: u32| { if x > 255 { 255 } else { x } };
+            let r = clamp(r);
+            let g = clamp(g);
+            let b = clamp(b);
+            context.set_lut(i as u8, r as u8, g as u8, b as u8);
+        }
+    }
     fn render(&mut self, context: &mut dyn Context) {
+        self.frame += 1;
+        if self.frame >= FRAME_MAX {
+            self.frame = 0;
+        }
+
         let fb_w = context.fb_w();
         let fb_h = context.fb_h();
         let coeff = (0.7885 * (1<<Q) as f32) as i32;
@@ -71,7 +113,7 @@ impl Demo for Julia {
             let fb_size = core::cmp::min(fb_w, fb_h) as i32;
             let mut a = (((pixel_x as i32) << Q) - ((fb_w as i32 - 1) << (Q-1))) * 2 / fb_size;
             let mut b = (((pixel_y as i32) << Q) - ((fb_h as i32 - 1) << (Q-1))) * 2 / fb_size;
-            const ITER_MAX: i32 = 32;
+            const ITER_MAX: i32 = 44;
             let mut final_iter = ITER_MAX<<Q;
             let mut prev_dist = -40<<Q;
 
@@ -122,34 +164,6 @@ impl Demo for Julia {
               + fb[(pixel_y+0) * fb_w + pixel_x+1] as u32)
              / 4) as u8
         };
-        for i in 0x00u32..=0xFFu32 {
-            let h = (((self.frame * 360))/FRAME_MAX + i) % 360;
-            let s = if i < 0xFF { 256-i } else { i };
-            let (_, sin) = cos_sin((2*i << Q) as i32 / 256);
-            let v = ((sin * 256) >> Q) as u32;
-
-            let h_sector = h / 60;
-            let h_frac = h % 60;
-
-            let p = v * ( 256 - s ) / 256;
-            let q = v * ( 256*60 - s * h_frac ) / (256*60);
-            let t = v * ( 256*60 - s * ( 60 - h_frac ) ) / (256*60);
-
-            let (r, g, b) = match h_sector {
-                0 => (v, t, p),
-                1 => (q, v, p),
-                2 => (p, v, t),
-                3 => (p, q, v),
-                4 => (t, p, v),
-                5 => (v, p, q),
-                _ => unreachable!()
-            };
-            let clamp = |x: u32| { if x > 255 { 255 } else { x } };
-            let r = clamp(r);
-            let g = clamp(g);
-            let b = clamp(b);
-            context.set_lut(i as u8, r as u8, g as u8, b as u8);
-        }
         {
             let pixel_y = 0;
             context.wait_for_line(pixel_y);
@@ -202,10 +216,6 @@ impl Demo for Julia {
             for pixel_x in 0..fb_w {
                 context.fb()[pixel_y * fb_w + pixel_x] = context.fb()[(fb_h - pixel_y - 1) * fb_w + fb_w - pixel_x - 1];
             }
-        }
-        self.frame += 1;
-        if self.frame >= FRAME_MAX {
-            self.frame = 0;
         }
     }
 }

@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use demos::Context;
 use panic_halt as _;
 
 use core::cell::RefCell;
@@ -477,7 +478,11 @@ impl<'a> demos::Context for ContextS<'a> {
         }
     }
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
-        if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp {
+        let pixel_y = self.ltdc.cpsr.read().cypos().bits() as isize - (LTDC_INFO.vsync + LTDC_INFO.vbp) as isize;
+        if pixel_y >= 0 && pixel_y < FB_H as isize {
+            for pixel_x in 0..FB_W {
+                self.fb[pixel_y as usize * FB_W + pixel_x] = 222;
+            }
             panic!("Timed out setting LUT");
         }
         self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
@@ -536,11 +541,19 @@ fn LTDC() {
             while ltdc.srcr.read().imr().is_reload() { }
 
             cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
+
+            {
+                let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
+                use demos::Demo;
+                state.pre_render(&mut context);
+            }
         },
         LTDCState::Initialised => {
             let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
             use demos::Demo;
             state.render(&mut context);
+            context.wait_for_line(FB_H-1);
+            state.pre_render(&mut context);
         },
     }
     assert!(!ltdc.isr.read().lif().bit());

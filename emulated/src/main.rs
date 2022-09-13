@@ -88,6 +88,7 @@ pub fn main() {
                 fmuls: 0,
             };
             use demos::Demo;
+            state.pre_render(&mut context);
             state.render(&mut context);
             let scale = 100000;
             println!("{:4} +{:4} >{:4} >>{:4} *{:4} []{:4} /{:4} fi{:4} f*{:4}",
