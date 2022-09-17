@@ -480,13 +480,6 @@ impl<'a> demos::Context for ContextS<'a> {
         }
     }
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
-        let pixel_y = self.ltdc.cpsr.read().cypos().bits() as isize - (LTDC_INFO.vsync + LTDC_INFO.vbp) as isize;
-        if pixel_y >= 0 && pixel_y < FB_H as isize {
-            for pixel_x in 0..FB_W {
-                self.fb[pixel_y as usize * FB_W + pixel_x] = 222;
-            }
-            panic!("Timed out setting LUT");
-        }
         self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
     }
     fn stats_count_adds(&mut self, _: usize) {}
@@ -501,62 +494,60 @@ impl<'a> demos::Context for ContextS<'a> {
 
 #[interrupt]
 fn LTDC() {
-    static mut LTDC: Option<LTDC> = None;
     static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
-    static mut STATE: Option<demos::Julia> = None;
 
-    let ltdc = LTDC.get_or_insert_with(|| {
-        cortex_m::interrupt::free(|cs| GLTDC.borrow(cs).replace(None).unwrap())
-    });
-    ltdc.icr.write(|w| { w.clif().clear() });
+    cortex_m::interrupt::free(|cs| {
+        let mut ltdc_ = GLTDC.borrow(cs).borrow_mut();
+        let ltdc = ltdc_.as_mut().unwrap();
+        ltdc.icr.write(|w| { w.clif().clear() });
 
-    let state = STATE.get_or_insert_with(|| {
-        cortex_m::interrupt::free(|cs| GSTATE.borrow(cs).replace(None).unwrap())
-    });
+        let mut state_ = GSTATE.borrow(cs).borrow_mut();
+        let state = state_.as_mut().unwrap();
 
-    match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
-        LTDCState::Uninitialised => {
-            ////////////////////////////////////////////////////////////////////////
-            // configure layers
+        match cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow())) {
+            LTDCState::Uninitialised => {
+                ////////////////////////////////////////////////////////////////////////
+                // configure layers
 
-            // set background colour
-            ltdc.bccr.write(|w| { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
+                // set background colour
+                ltdc.bccr.write(|w| { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
 
-            // x, y
-            ltdc.layer1.whpcr.write(|w| { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + BORDER as u16).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - BORDER as u16 - 1) });
-            ltdc.layer1.wvpcr.write(|w| { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - BORDER as u16 - 1) });
-            // format
-            // TODO: make enumerated values
-            ltdc.layer1.pfcr.write(|w| { w.pf().l8() });
-            // framebuffer
-            ltdc.layer1.cfbar.write(|w| { w.cfbadd().bits(&*FB as *const u8 as u32) });
-            // line length, pitch
-            ltdc.layer1.cfblr.write(|w| { w.cfbll().bits((FB_W + 3).try_into().unwrap()).cfbp().bits(FB_W.try_into().unwrap()) });
-            // number of lines
-            ltdc.layer1.cfblnr.write(|w| { w.cfblnbr().bits(FB_H.try_into().unwrap()) });
-            // blending mode
-            ltdc.layer1.bfcr.write(|w| { w.bf1().constant().bf2().constant() });
-            ltdc.layer1.cr.write(|w| { w.len().enabled().cluten().enabled() });
+                // x, y
+                ltdc.layer1.whpcr.write(|w| { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + BORDER as u16).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - BORDER as u16 - 1) });
+                ltdc.layer1.wvpcr.write(|w| { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - BORDER as u16 - 1) });
+                // format
+                // TODO: make enumerated values
+                ltdc.layer1.pfcr.write(|w| { w.pf().l8() });
+                // framebuffer
+                ltdc.layer1.cfbar.write(|w| { w.cfbadd().bits(&*FB as *const u8 as u32) });
+                // line length, pitch
+                ltdc.layer1.cfblr.write(|w| { w.cfbll().bits((FB_W + 3).try_into().unwrap()).cfbp().bits(FB_W.try_into().unwrap()) });
+                // number of lines
+                ltdc.layer1.cfblnr.write(|w| { w.cfblnbr().bits(FB_H.try_into().unwrap()) });
+                // blending mode
+                ltdc.layer1.bfcr.write(|w| { w.bf1().constant().bf2().constant() });
+                ltdc.layer1.cr.write(|w| { w.len().enabled().cluten().enabled() });
 
-            // reload shadow registers immediately
-            ltdc.srcr.write(|w| { w.imr().reload() });
-            while ltdc.srcr.read().imr().is_reload() { }
+                // reload shadow registers immediately
+                ltdc.srcr.write(|w| { w.imr().reload() });
+                while ltdc.srcr.read().imr().is_reload() { }
 
-            cortex_m::interrupt::free(|cs| *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised);
+                *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised;
 
-            {
+                {
+                    let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
+                    use demos::Demo;
+                    state.pre_render(&mut context);
+                }
+            },
+            LTDCState::Initialised => {
                 let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
                 use demos::Demo;
+                state.render(&mut context);
+                context.wait_for_line(FB_H-1);
                 state.pre_render(&mut context);
-            }
-        },
-        LTDCState::Initialised => {
-            let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
-            use demos::Demo;
-            state.render(&mut context);
-            context.wait_for_line(FB_H-1);
-            state.pre_render(&mut context);
-        },
-    }
-    assert!(!ltdc.isr.read().lif().bit());
+            },
+        }
+        assert!(!ltdc.isr.read().lif().bit());
+    });
 }
