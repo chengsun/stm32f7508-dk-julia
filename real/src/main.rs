@@ -465,6 +465,7 @@ impl<'a> demos::Context for ContextS<'a> {
         self.fb
     }
     fn wait_for_line(&mut self, pixel_y: usize) {
+        #[cfg(not(debug_assertions))]
         loop {
             if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
                 break;
@@ -548,6 +549,7 @@ fn LTDC() {
                 state.pre_render(&mut context);
             },
         }
+        #[cfg(not(debug_assertions))]
         assert!(!ltdc.isr.read().lif().bit());
     });
 }
