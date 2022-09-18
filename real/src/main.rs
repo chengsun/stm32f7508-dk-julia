@@ -62,7 +62,7 @@ fn main() -> ! {
         {
             let latency = 7;
             flash.acr.write(|w| {
-                w.latency().bits(latency).arten().bit(true).prften().bit(true)
+                w.latency().bits(latency).arten().set_bit().prften().set_bit()
             });
 
             while flash.acr.read().latency().bits() != latency { }
@@ -77,6 +77,10 @@ fn main() -> ! {
 
         // PLL input = HSI = 16MHz
         // PLL output = 16MHz * PLLN / PLLM / PLLP = 16MHz * 64 / 8 / 8
+        // 2 <= PLLM <= 63
+        // 1 <= HSI / PLLM <= 2
+        // 50 <= PLLN <= 432
+        // 100 <= HSI * PLLN / PLLM / PLLP <= 216
         let pllm = 8;
         let plln = 216;
         let pllp = 2;
@@ -111,16 +115,15 @@ fn main() -> ! {
             w.pllon().bit(true).pllsaion().bit(true)
         });
 
+        // Wait for PLL and PLLSAI locks
         loop {
             let cr = rcc.cr.read();
             if cr.pllrdy().bit() && cr.pllsairdy().bit() { break; }
         }
 
-        rcc.cfgr.write(|w| unsafe {
-            w.sw().bits(0b10)
-        });
-
-        while rcc.cfgr.read().sws().bits() != 0b10 { }
+        // Switch system clock
+        rcc.cfgr.write(|w| { w.sw().pll().ppre1().div4().ppre2().div2() });
+        while !rcc.cfgr.read().sws().is_pll() { }
 
         //////////////////////////////////////////////////////////////////////////
         // configure the LCD GPIO pins
