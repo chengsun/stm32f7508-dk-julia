@@ -400,56 +400,6 @@ fn main() -> ! {
     }
 }
 
-/*
-fn cie_lch_to_rgb(l: i32, c: i32, h: i32) -> (i32, i32, i32) {
-    let (cos_h, sin_h) = cos_sin(h);
-    let u = (c * cos_h) >> Q;
-    let v = (c * sin_h) >> Q;
-
-    const U_N = (0.2009 * ((1 << Q) as f32)) as i32;
-    const V_N = (0.4610 * ((1 << Q) as f32)) as i32;
-
-    const X_N = (95.047 * ((1 << Q) as f32)) as i32;
-    const Y_N = (100.000 * ((1 << Q) as f32)) as i32;
-    const Z_N = (108.883 * ((1 << Q) as f32)) as i32;
-
-    let u_prime = u / (13 * l) + U_N;
-    let v_prime = v / (13 * l) + V_N;
-    let f32_to_q = |f| { f * ((1 << Q) as f32) as i32 };
-    let cube = |x| { x*x*x };
-    let y =
-        if l <= 8<<13 {
-            let f = 3./29.;
-            let f_cube = (f*f*f) * ((1 << Q) as f32) as i32;
-            (Y_N * l * f_cube) >> (2*Q)
-        } else {
-            let f = (l + 16<<Q)/116;
-            let f_cube = (f*f*f) >> (2*Q);
-            (Y_N * f_cube) >> Q
-        };
-    let x = y * (9 * u_prime)/(4 * v_prime);
-    let z = y * ((12<<Q) - 3*u_prime - 20*v_prime) / (4 * v_prime);
-
-    let mat_xyz = |c_x, c_y, c_z| {
-        (f32_to_q(c_x) * x + f32_to_q(c_y) * y + f32_to_q(c_z) * z) >> Q
-    };
-
-    let r_linear = mat_xyz(+3.24096994, -1.53738318, -0.49861076);
-    let g_linear = mat_xyz(-0.96924364, +1.87596750, +0.04155506);
-    let r_linear = mat_xyz(+0.05563008, -0.20397696, +1.05697151);
-
-    let gamma = |linear| {
-        if linear <= f32_to_q(0.0031308) {
-            (f32_to_q(12.92) * linear) >> Q
-        } else {
-            (((f32_to_q(1.055) * q_pow(u, f32_to_q(1./2.4))) >> Q) - f32_to_q(0.055))
-        }
-    };
-
-    (x, y, z)
-}
-*/
-
 struct ContextS<'a> {
     fb: &'a mut [u8],
     ltdc: &'a mut LTDC,
