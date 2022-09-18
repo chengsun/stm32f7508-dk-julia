@@ -36,6 +36,12 @@ const LTDC_INFO: LTDCInfo = LTDCInfo {
     vfp: 8,
 };
 
+const FB_W: usize = LTDC_INFO.aw as usize;
+const FB_H: usize = LTDC_INFO.ah as usize;
+
+const _: () = assert!(FB_W == demos::FB_W);
+const _: () = assert!(FB_H == demos::FB_H);
+
 #[derive(Copy, Clone)]
 enum LTDCState {
     Uninitialised,
@@ -43,10 +49,6 @@ enum LTDCState {
 }
 
 static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState::Uninitialised));
-
-const BORDER: usize = 0;
-const FB_W: usize = LTDC_INFO.aw as usize - 2*BORDER;
-const FB_H: usize = LTDC_INFO.ah as usize - 2*BORDER;
 
 #[entry]
 fn main() -> ! {
@@ -96,6 +98,8 @@ fn main() -> ! {
         });
         // PLLSAI input = HSI = 16MHz
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
+        // 50 <= PLLSAIN <= 432
+        // 2 <= PLLSAIR <= 7
         let pllsain = 54;
         let pllsair = 5;
         let pllsaidivr = 4;
@@ -107,6 +111,7 @@ fn main() -> ! {
                 2 => w.pllsaidivr().div2(),
                 4 => w.pllsaidivr().div4(),
                 8 => w.pllsaidivr().div8(),
+                16 => w.pllsaidivr().div16(),
                 _ => unreachable!()
             }
         });
@@ -380,7 +385,7 @@ fn main() -> ! {
         ltdc.gcr.write(|w| { w.hspol().active_low().vspol().active_low().depol().active_low().pcpol().rising_edge() });
 
         // enable line interrupt
-        ltdc.lipcr.write(|w| { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16) });
+        ltdc.lipcr.write(|w| { w.lipos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp) });
         ltdc.ier.write(|w| { w.lie().enabled() });
 
         // enable the LTDC peripheral
@@ -403,24 +408,17 @@ fn main() -> ! {
 struct ContextS<'a> {
     fb: &'a mut [u8],
     ltdc: &'a mut LTDC,
-    fb_w: usize,
-    fb_h: usize,
 }
 
 impl<'a> demos::Context for ContextS<'a> {
-    fn fb_h(&self) -> usize {
-        self.fb_h
-    }
-    fn fb_w(&self) -> usize {
-        self.fb_w
-    }
+    #[inline(always)]
     fn fb(&mut self) -> &mut [u8] {
         self.fb
     }
     fn wait_for_line(&mut self, pixel_y: usize) {
         #[cfg(not(debug_assertions))]
         loop {
-            if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16 + pixel_y as u16 {
+            if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
                 break;
             }
             if self.ltdc.isr.read().lif().is_reached() {
@@ -429,8 +427,6 @@ impl<'a> demos::Context for ContextS<'a> {
                 }
                 panic!("Timed out on line {}", pixel_y);
             }
-            // It is a mystery why this helps. But it helps significantly.
-            cortex_m::asm::nop();
         }
     }
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
@@ -467,8 +463,8 @@ fn LTDC() {
                 ltdc.bccr.write(|w| { w.bcred().bits(0xff).bcgreen().bits(0x80).bcblue().bits(0x00) });
 
                 // x, y
-                ltdc.layer1.whpcr.write(|w| { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + BORDER as u16).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - BORDER as u16 - 1) });
-                ltdc.layer1.wvpcr.write(|w| { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + BORDER as u16).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - BORDER as u16 - 1) });
+                ltdc.layer1.whpcr.write(|w| { w.whstpos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp).whsppos().bits(LTDC_INFO.hsync + LTDC_INFO.hbp + LTDC_INFO.aw - 1) });
+                ltdc.layer1.wvpcr.write(|w| { w.wvstpos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp).wvsppos().bits(LTDC_INFO.vsync + LTDC_INFO.vbp + LTDC_INFO.ah - 1) });
                 // format
                 // TODO: make enumerated values
                 ltdc.layer1.pfcr.write(|w| { w.pf().l8() });
@@ -489,13 +485,13 @@ fn LTDC() {
                 *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised;
 
                 {
-                    let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
+                    let mut context = ContextS { fb: &mut *FB, ltdc: ltdc };
                     use demos::Demo;
                     state.pre_render(&mut context);
                 }
             },
             LTDCState::Initialised => {
-                let mut context = ContextS { fb_w: FB_W, fb_h: FB_H, fb: &mut *FB, ltdc: ltdc };
+                let mut context = ContextS { fb: &mut *FB, ltdc: ltdc };
                 use demos::Demo;
                 state.render(&mut context);
                 context.wait_for_line(FB_H-1);

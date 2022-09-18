@@ -8,7 +8,7 @@ const FB_W: usize = 480;
 const FB_H: usize = 272;
 
 struct ContextS<'a> {
-    fb: &'a mut [u8],
+    fb: &'a mut [u8; FB_W*FB_H],
     lut: &'a mut [(u8, u8, u8)],
     adds: usize,
     cmps: usize,
@@ -21,12 +21,6 @@ struct ContextS<'a> {
 }
 
 impl<'a> demos::Context for ContextS<'a> {
-    fn fb_h(&self) -> usize {
-        FB_H
-    }
-    fn fb_w(&self) -> usize {
-        FB_W
-    }
     fn fb(&mut self) -> &mut [u8] {
         self.fb
     }

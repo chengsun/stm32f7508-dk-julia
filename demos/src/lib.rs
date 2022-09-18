@@ -1,8 +1,6 @@
 #![no_std]
 
 pub trait Context {
-    fn fb_h(&self) -> usize;
-    fn fb_w(&self) -> usize;
     fn fb(&mut self) -> &mut [u8];
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
@@ -26,6 +24,9 @@ pub trait Demo {
     /// F is getting read out). Use to render frame F+1.
     fn render(&mut self, context: &mut dyn Context);
 }
+
+pub const FB_W: usize = 480;
+pub const FB_H: usize = 272;
 
 const Q: i32 = 10;
 const FRAME_MAX: u32 = 300;
@@ -103,17 +104,15 @@ impl Demo for Julia {
             self.frame = 0;
         }
 
-        let fb_w = context.fb_w();
-        let fb_h = context.fb_h();
         let coeff = (0.7885 * (1<<Q) as f32) as i32;
         let (cos, sin) = cos_sin(((4 * self.frame as i32) << Q) / FRAME_MAX as i32);
         let c_a = (coeff * cos) >> Q;
         let c_b = (coeff * sin) >> Q;
         let compute_value = |context: &mut dyn Context, pixel_x, pixel_y| {
-            let fb_size = core::cmp::min(fb_w, fb_h) as i32;
-            let mut a = (((pixel_x as i32) << Q) - ((fb_w as i32 - 1) << (Q-1))) * 2 / fb_size;
-            let mut b = (((pixel_y as i32) << Q) - ((fb_h as i32 - 1) << (Q-1))) * 2 / fb_size;
-            const ITER_MAX: i32 = 36;
+            let fb_size = core::cmp::min(FB_W, FB_H) as i32;
+            let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
+            let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
+            const ITER_MAX: i32 = 30;
             let mut final_iter = ITER_MAX<<Q;
             let mut prev_dist = -40<<Q;
 
@@ -158,63 +157,63 @@ impl Demo for Julia {
             ((final_iter * 255) / (ITER_MAX << Q)) as u8
         };
         let average_value = |fb: &[u8], pixel_x, pixel_y| {
-            ((fb[(pixel_y-1) * fb_w + pixel_x] as u32
-              + fb[(pixel_y+1) * fb_w + pixel_x] as u32
-              + fb[(pixel_y+0) * fb_w + pixel_x-1] as u32
-              + fb[(pixel_y+0) * fb_w + pixel_x+1] as u32)
+            ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
+              + fb[(pixel_y+1) * FB_W + pixel_x] as u32
+              + fb[(pixel_y+0) * FB_W + pixel_x-1] as u32
+              + fb[(pixel_y+0) * FB_W + pixel_x+1] as u32)
              / 4) as u8
         };
         {
             let pixel_y = 0;
             context.wait_for_line(pixel_y);
-            for pixel_x in 0..fb_w {
+            for pixel_x in 0..FB_W {
                 let value = compute_value(context, pixel_x, pixel_y);
-                context.fb()[pixel_y * fb_w + pixel_x] = value;
+                context.fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
-        for pixel_y in 1..fb_h/2+1 {
+        for pixel_y in 1..FB_H/2+1 {
             context.wait_for_line(pixel_y);
-            if pixel_y < fb_h/2 {
+            if pixel_y < FB_H/2 {
                 let mut pixel_x = pixel_y & 1;
-                while pixel_x < fb_w {
+                while pixel_x < FB_W {
                     let value = compute_value(context, pixel_x, pixel_y);
-                    context.fb()[pixel_y * fb_w + pixel_x] = value;
+                    context.fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
             }
             if pixel_y >= 2 {
                 let pixel_y = pixel_y - 1;
                 let mut pixel_x = (pixel_y & 1) ^ 1;
-                while pixel_x < fb_w {
+                while pixel_x < FB_W {
                     let value = average_value(&context.fb(), pixel_x, pixel_y);
-                    context.fb()[pixel_y * fb_w + pixel_x] = value;
+                    context.fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
             }
         }
         {
-            let pixel_y = fb_h/2;
+            let pixel_y = FB_H/2;
             context.wait_for_line(pixel_y);
             let mut pixel_x = pixel_y & 1;
-            while pixel_x < fb_w {
-                context.fb()[pixel_y * fb_w + pixel_x] = context.fb()[(fb_h - pixel_y - 1) * fb_w + fb_w - pixel_x - 1];
+            while pixel_x < FB_W {
+                context.fb()[pixel_y * FB_W + pixel_x] = context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
                 pixel_x += 2;
             }
         }
         {
-            let pixel_y = fb_h/2-1;
+            let pixel_y = FB_H/2-1;
             let mut pixel_x = (pixel_y & 1) ^ 1;
-            while pixel_x < fb_w {
+            while pixel_x < FB_W {
                 let value = average_value(&context.fb(), pixel_x, pixel_y);
-                context.fb()[pixel_y * fb_w + pixel_x] = value;
-                context.fb()[(fb_h - pixel_y - 1) * fb_w + fb_w - pixel_x - 1] = value;
+                context.fb()[pixel_y * FB_W + pixel_x] = value;
+                context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1] = value;
                 pixel_x += 2;
             }
         }
-        for pixel_y in fb_h/2+1..fb_h {
+        for pixel_y in FB_H/2+1..FB_H {
             context.wait_for_line(pixel_y);
-            for pixel_x in 0..fb_w {
-                context.fb()[pixel_y * fb_w + pixel_x] = context.fb()[(fb_h - pixel_y - 1) * fb_w + fb_w - pixel_x - 1];
+            for pixel_x in 0..FB_W {
+                context.fb()[pixel_y * FB_W + pixel_x] = context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
             }
         }
     }
