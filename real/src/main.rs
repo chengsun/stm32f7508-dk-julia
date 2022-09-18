@@ -62,7 +62,7 @@ fn main() -> ! {
         {
             let latency = 7;
             flash.acr.write(|w| {
-                w.latency().bits(latency).arten().bit(true)
+                w.latency().bits(latency).arten().bit(true).prften().bit(true)
             });
 
             while flash.acr.read().latency().bits() != latency { }
