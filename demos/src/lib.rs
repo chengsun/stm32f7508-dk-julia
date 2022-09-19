@@ -1,5 +1,6 @@
 #![no_std]
 
+#[cfg_attr(feature="real", link_section = ".fb")]
 static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
 
 #[inline(always)]

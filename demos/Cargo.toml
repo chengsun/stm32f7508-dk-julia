@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 
+[features]
+real = []
+
 [profile.release]
 codegen-units = 1
 debug = true
