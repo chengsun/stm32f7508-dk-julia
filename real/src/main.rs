@@ -410,13 +410,9 @@ struct ContextS<'a> {
     ltdc: &'a mut LTDC,
 }
 
-impl<'a> demos::Context for ContextS<'a> {
-    #[inline(always)]
-    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
-        self.fb
-    }
-    fn wait_for_line(&mut self, pixel_y: usize) {
-        #[cfg(not(debug_assertions))]
+impl<'a> ContextS<'a> {
+    #[cold]
+    fn wait_for_line_cold(&mut self, pixel_y: usize) {
         loop {
             if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
                 break;
@@ -429,6 +425,20 @@ impl<'a> demos::Context for ContextS<'a> {
             }
         }
     }
+}
+
+impl<'a> demos::Context for ContextS<'a> {
+    #[inline(always)]
+    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
+        self.fb
+    }
+    #[inline(always)]
+    fn wait_for_line(&mut self, pixel_y: usize) {
+        if self.ltdc.cpsr.read().cypos().bits() <= LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
+            self.wait_for_line_cold(pixel_y);
+        }
+    }
+    #[inline(always)]
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
         self.ltdc.layer1.clutwr.write(|w| { w.clutadd().bits(i as u8).red().bits(r as u8).green().bits(g as u8).blue().bits(b as u8) });
     }
