@@ -229,7 +229,6 @@ impl Demo for Julia {
     #[inline(always)]
     fn render(&mut self, context: &mut dyn Context) {
         self.frame += 1;
-        if self.frame == 5 { self.frame = 220; }
         if self.frame >= FRAME_MAX {
             self.frame = 0;
         }
