@@ -8,7 +8,6 @@ const FB_W: usize = demos::FB_W;
 const FB_H: usize = demos::FB_H;
 
 struct ContextS<'a> {
-    fb: &'a mut [u8; FB_W*FB_H],
     lut: &'a mut [(u8, u8, u8)],
     adds: usize,
     cmps: usize,
@@ -21,9 +20,6 @@ struct ContextS<'a> {
 }
 
 impl<'a> demos::Context for ContextS<'a> {
-    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
-        self.fb
-    }
     fn wait_for_line(&mut self, _pixel_y: usize) {
     }
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
@@ -51,7 +47,6 @@ pub fn main() {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let mut fb = [0u8; FB_W * FB_H];
     let mut lut = [(0u8, 0u8, 0u8); 256];
 
     let mut state = demos::Julia::new();
@@ -70,7 +65,6 @@ pub fn main() {
 
         {
             let mut context = ContextS {
-                fb: &mut fb,
                 lut: &mut lut,
                 adds: 0,
                 cmps: 0,
@@ -107,7 +101,7 @@ pub fn main() {
 
         for y in 0..FB_H {
             for x in 0..FB_W {
-                let (r, g, b) = lut[fb[y * FB_W + x] as usize];
+                let (r, g, b) = lut[demos::fb()[y * FB_W + x] as usize];
                 canvas.set_draw_color(Color::RGB(r, g, b));
                 canvas.draw_point(Point::new(x as i32, y as i32)).unwrap();
             }

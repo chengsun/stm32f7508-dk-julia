@@ -1,7 +1,13 @@
 #![no_std]
 
+static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
+
+#[inline(always)]
+pub fn fb() -> &'static mut [u8; FB_W*FB_H] {
+    unsafe { &mut FB }
+}
+
 pub trait Context {
-    fn fb(&mut self) -> &mut [u8; FB_W*FB_H];
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
     fn stats_count_adds(&mut self, n: usize);
@@ -175,7 +181,7 @@ impl Demo for Julia {
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
                 let value = self.compute_value_cold(context, pixel_x, pixel_y, c_a, c_b);
-                context.fb()[pixel_y * FB_W + pixel_x] = value;
+                fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
         for pixel_y in 1..FB_H/2+1 {
@@ -184,7 +190,7 @@ impl Demo for Julia {
                 let mut pixel_x = pixel_y & 1;
                 while pixel_x < FB_W {
                     let value = self.compute_value_hot(context, pixel_x, pixel_y, c_a, c_b);
-                    context.fb()[pixel_y * FB_W + pixel_x] = value;
+                    fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
             }
@@ -192,8 +198,8 @@ impl Demo for Julia {
                 let pixel_y = pixel_y - 1;
                 let mut pixel_x = (pixel_y & 1) ^ 1;
                 while pixel_x < FB_W {
-                    let value = average_value(&context.fb(), pixel_x, pixel_y);
-                    context.fb()[pixel_y * FB_W + pixel_x] = value;
+                    let value = average_value(&fb(), pixel_x, pixel_y);
+                    fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
             }
@@ -203,7 +209,7 @@ impl Demo for Julia {
             context.wait_for_line(pixel_y);
             let mut pixel_x = pixel_y & 1;
             while pixel_x < FB_W {
-                context.fb()[pixel_y * FB_W + pixel_x] = context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
+                fb()[pixel_y * FB_W + pixel_x] = fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
                 pixel_x += 2;
             }
         }
@@ -211,16 +217,16 @@ impl Demo for Julia {
             let pixel_y = FB_H/2-1;
             let mut pixel_x = (pixel_y & 1) ^ 1;
             while pixel_x < FB_W {
-                let value = average_value(&context.fb(), pixel_x, pixel_y);
-                context.fb()[pixel_y * FB_W + pixel_x] = value;
-                context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1] = value;
+                let value = average_value(&fb(), pixel_x, pixel_y);
+                fb()[pixel_y * FB_W + pixel_x] = value;
+                fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1] = value;
                 pixel_x += 2;
             }
         }
         for pixel_y in FB_H/2+1..FB_H {
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
-                context.fb()[pixel_y * FB_W + pixel_x] = context.fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
+                fb()[pixel_y * FB_W + pixel_x] = fb()[(FB_H - pixel_y - 1) * FB_W + FB_W - pixel_x - 1];
             }
         }
     }

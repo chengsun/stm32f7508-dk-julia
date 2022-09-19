@@ -406,7 +406,6 @@ fn main() -> ! {
 }
 
 struct ContextS<'a> {
-    fb: &'a mut [u8; FB_W*FB_H],
     ltdc: &'a mut LTDC,
 }
 
@@ -419,7 +418,7 @@ impl<'a> ContextS<'a> {
             }
             if self.ltdc.isr.read().lif().is_reached() {
                 for pixel_x in 0..FB_W {
-                    self.fb[pixel_y * FB_W + pixel_x] = 222;
+                    demos::fb()[pixel_y * FB_W + pixel_x] = 222;
                 }
                 panic!("Timed out on line {}", pixel_y);
             }
@@ -428,10 +427,6 @@ impl<'a> ContextS<'a> {
 }
 
 impl<'a> demos::Context for ContextS<'a> {
-    #[inline(always)]
-    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
-        self.fb
-    }
     #[inline(always)]
     fn wait_for_line(&mut self, pixel_y: usize) {
         if self.ltdc.cpsr.read().cypos().bits() <= LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
@@ -454,8 +449,6 @@ impl<'a> demos::Context for ContextS<'a> {
 
 #[interrupt]
 fn LTDC() {
-    static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
-
     cortex_m::interrupt::free(|cs| {
         let mut ltdc_ = GLTDC.borrow(cs).borrow_mut();
         let ltdc = ltdc_.as_mut().unwrap();
@@ -479,7 +472,7 @@ fn LTDC() {
                 // TODO: make enumerated values
                 ltdc.layer1.pfcr.write(|w| { w.pf().l8() });
                 // framebuffer
-                ltdc.layer1.cfbar.write(|w| { w.cfbadd().bits(&*FB as *const u8 as u32) });
+                ltdc.layer1.cfbar.write(|w| { w.cfbadd().bits(&*demos::fb() as *const u8 as u32) });
                 // line length, pitch
                 ltdc.layer1.cfblr.write(|w| { w.cfbll().bits((FB_W + 3).try_into().unwrap()).cfbp().bits(FB_W.try_into().unwrap()) });
                 // number of lines
@@ -495,13 +488,13 @@ fn LTDC() {
                 *(LTDC_STATE.borrow(cs).borrow_mut()) = LTDCState::Initialised;
 
                 {
-                    let mut context = ContextS { fb: &mut *FB, ltdc: ltdc };
+                    let mut context = ContextS { ltdc };
                     use demos::Demo;
                     state.pre_render(&mut context);
                 }
             },
             LTDCState::Initialised => {
-                let mut context = ContextS { fb: &mut *FB, ltdc: ltdc };
+                let mut context = ContextS { ltdc };
                 use demos::Demo;
                 state.render(&mut context);
                 context.wait_for_line(FB_H-1);
