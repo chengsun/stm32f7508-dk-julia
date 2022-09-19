@@ -154,7 +154,7 @@ impl Julia {
 
                 context.stats_count_adds(2);
                 context.stats_count_shrs(1);
-                a = (div_dist2(context, a2qq - b2qq)) + c_a;
+                a = (div_dist2(context, this_distqq - 2*b2qq)) + c_a;
 
                 context.stats_count_adds(1);
                 b = c_b - two_aibi;

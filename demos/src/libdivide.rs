@@ -67,43 +67,24 @@ fn mullhi(x: i32, y: i32) -> i32 {
 
 pub fn gen(d: i32) -> Divider {
     assert!(d > 0);
-
-    // If d is a power of 2, or negative a power of 2, we have to use a shift.
-    // This is especially important because the magic algorithm fails for -1.
-    // To check if d is a power of 2 or its inverse, it suffices to check
-    // whether its absolute value has exactly one bit set. This works even for
-    // INT_MIN, because abs(INT_MIN) == INT_MIN, and INT_MIN has one bit set
-    // and is a power of 2.
     let abs_d = d as u32;
     let floor_log_2_d = 31 - abs_d.leading_zeros();
-    // check if exactly one bit is set,
-    // don't care if abs_d is 0 since that's divide by zero
     if (abs_d & (abs_d - 1)) == 0 {
         Divider {
-            magic: 0,
-            more: floor_log_2_d as u8,
+            magic: i32::MAX,
+            more: (floor_log_2_d - 1) as u8,
         }
     } else {
-        assert!(floor_log_2_d >= 1);
-
-        // the dividend here is 2**(floor_log_2_d + 31), so the low 32 bit word
-        // is 0 and the high word is floor_log_2_d - 1
         let magic = {
             let q = 1u64 << (floor_log_2_d + 31);
             let r = abs_d as u64;
             (q / r + 1) as i32
         };
-
-        // We are going to start with a power of floor_log_2_d - 1.
-        // This works if works if e < 2**floor_log_2_d.
         let more = (floor_log_2_d - 1) as u8;
-
         Divider { magic, more }
     }
 }
 
 pub fn div(numer: i32, denom: &Divider) -> i32 {
-    let shift = denom.more;
-    let q = if 0 == denom.magic { numer } else { mullhi(denom.magic, numer) };
-    q >> shift
+    mullhi(denom.magic, numer) >> denom.more
 }
