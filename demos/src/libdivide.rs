@@ -1,14 +1,38 @@
+// Derived from the Rust port at https://github.com/youknowone/rust-divide
+// which was in turn ported from libdivide 4.0.0
+//
+// This is an extremely cut down version of the division algorithm, with many
+// corners cut for performance reasons -- as a result the result of the division
+// may be inaccurate (but visually acceptable). Do not use for any other
+// purpose.
+//
+// -----------------------------------------------------------------------------
+//
 // libdivide.h - Optimized integer division
 // https://libdivide.com
 //
 // Copyright (C) 2010 - 2021 ridiculous_fish, <libdivide@ridiculousfish.com>
 // Copyright (C) 2016 - 2021 Kim Walisch, <kim.walisch@gmail.com>
 //
-// libdivide is dual-licensed under the Boost or zlib licenses.
-// You may use libdivide under the terms of either of these.
-// See LICENSE.txt for more details.
-
-// Port from 4.0.0
+//
+// This software is provided 'as-is', without any express or implied
+// warranty. In no event will the authors be held liable for any damages
+// arising from the use of this software.
+// 
+// Permission is granted to anyone to use this software for any purpose,
+// including commercial applications, and to alter it and redistribute it
+// freely, subject to the following restrictions:
+// 
+// 1. The origin of this software must not be misrepresented; you must not
+// claim that you wrote the original software. If you use this software
+// in a product, an acknowledgment in the product documentation would be
+// appreciated but is not required.
+// 2. Altered source versions must be plainly marked as such, and must not be
+// misrepresented as being the original software.
+// 3. This notice may not be removed or altered from any source distribution.
+//
+// -----------------------------------------------------------------------------
+//
 
 use core::convert::TryInto;
 
@@ -22,38 +46,6 @@ pub const DIVIDER_NULL: Divider = Divider {
     magic: 0,
     more: 0,
 };
-
-// Explanation of the "more" field:
-//
-// * Bits 0-5 is the shift value (for shift path or mult path).
-// * Bit 6 is the add indicator for mult path.
-// * Bit 7 is set if the divisor is negative. We use bit 7 as the negative
-//   divisor indicator so that we can efficiently use sign extension to
-//   create a bitmask with all bits set to 1 (if the divisor is negative)
-//   or 0 (if the divisor is positive).
-//
-// u32: [0-4] shift value
-//      [5] ignored
-//      [6] add indicator
-//      magic number of 0 indicates shift path
-//
-// s32: [0-4] shift value
-//      [5] ignored
-//      [6] add indicator
-//      [7] indicates negative divisor
-//      magic number of 0 indicates shift path
-//
-// u64: [0-5] shift value
-//      [6] add indicator
-//      magic number of 0 indicates shift path
-//
-// s64: [0-5] shift value
-//      [6] add indicator
-//      [7] indicates negative divisor
-//      magic number of 0 indicates shift path
-//
-// In s32 and s64 branchfree modes, the magic number is negated according to
-// whether the divisor is negated. In branchfree strategy, it is not negated.
 
 #[inline]
 fn mullhi(x: i32, y: i32) -> i32 {
@@ -70,6 +62,10 @@ pub fn gen(d: i32) -> Divider {
     let abs_d = d as u32;
     let floor_log_2_d = 31 - abs_d.leading_zeros();
     if (abs_d & (abs_d - 1)) == 0 {
+        // This codepath was modified from upstream libdivide. It makes it so
+        // that we never have to special-case in `div` for zero magic (`smmul`
+        // is fast on this ARM chip). The approximation is close enough for our
+        // purposes!
         Divider {
             magic: i32::MAX,
             more: (floor_log_2_d - 1) as u8,
