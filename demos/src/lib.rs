@@ -1,7 +1,7 @@
 #![no_std]
 
 pub trait Context {
-    fn fb(&mut self) -> &mut [u8];
+    fn fb(&mut self) -> &mut [u8; FB_W*FB_H];
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
     fn stats_count_adds(&mut self, n: usize);
@@ -112,7 +112,7 @@ impl Demo for Julia {
             let fb_size = core::cmp::min(FB_W, FB_H) as i32;
             let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
             let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-            const ITER_MAX: i32 = 30;
+            const ITER_MAX: i32 = 36;
             let mut final_iter = ITER_MAX<<Q;
             let mut prev_dist = -40<<Q;
 
@@ -156,7 +156,7 @@ impl Demo for Julia {
             }
             ((final_iter * 255) / (ITER_MAX << Q)) as u8
         };
-        let average_value = |fb: &[u8], pixel_x, pixel_y| {
+        let average_value = |fb: &[u8; FB_W*FB_H], pixel_x, pixel_y| {
             ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
               + fb[(pixel_y+1) * FB_W + pixel_x] as u32
               + fb[(pixel_y+0) * FB_W + pixel_x-1] as u32

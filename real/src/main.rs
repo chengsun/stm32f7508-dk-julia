@@ -406,13 +406,13 @@ fn main() -> ! {
 }
 
 struct ContextS<'a> {
-    fb: &'a mut [u8],
+    fb: &'a mut [u8; FB_W*FB_H],
     ltdc: &'a mut LTDC,
 }
 
 impl<'a> demos::Context for ContextS<'a> {
     #[inline(always)]
-    fn fb(&mut self) -> &mut [u8] {
+    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
         self.fb
     }
     fn wait_for_line(&mut self, pixel_y: usize) {

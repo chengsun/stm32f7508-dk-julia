@@ -4,8 +4,8 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
 
-const FB_W: usize = 480;
-const FB_H: usize = 272;
+const FB_W: usize = demos::FB_W;
+const FB_H: usize = demos::FB_H;
 
 struct ContextS<'a> {
     fb: &'a mut [u8; FB_W*FB_H],
@@ -21,7 +21,7 @@ struct ContextS<'a> {
 }
 
 impl<'a> demos::Context for ContextS<'a> {
-    fn fb(&mut self) -> &mut [u8] {
+    fn fb(&mut self) -> &mut [u8; FB_W*FB_H] {
         self.fb
     }
     fn wait_for_line(&mut self, _pixel_y: usize) {
