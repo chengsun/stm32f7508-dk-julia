@@ -39,6 +39,7 @@ pub const FB_H: usize = 272;
 
 const Q: i32 = 10;
 const FRAME_MAX: u32 = 1000;
+const COEFF_FRAME_MAX: u32 = 4567;
 
 const MAX_DIST_SQR: i32 = 25;
 const INDEX_MQ: i32 = Q+2;
@@ -80,6 +81,7 @@ fn cos_sin(theta: i32) -> (i32, i32) {
 
 pub struct Julia {
     frame: u32,
+    coeff_frame: u32,
 }
 
 impl Julia {
@@ -91,7 +93,7 @@ impl Julia {
             let div = (((x*x) >> (3*Q-2*INDEX_MQ)) + 1) as i32;
             inverses2()[x] = libdivide::gen(div);
         }
-        Self { frame: 0 }
+        Self { frame: 0, coeff_frame: 0 }
     }
 
     #[inline(always)]
@@ -232,8 +234,14 @@ impl Demo for Julia {
         if self.frame >= FRAME_MAX {
             self.frame = 0;
         }
+        self.coeff_frame += 1;
+        if self.coeff_frame >= COEFF_FRAME_MAX {
+            self.coeff_frame = 0;
+        }
 
-        let coeff = (0.7885 * (1<<Q) as f32) as i32;
+        let (coeff_frame_cos, _) = cos_sin(((4 * self.coeff_frame as i32) << Q) / COEFF_FRAME_MAX as i32);
+        let coeff =
+            ((coeff_frame_cos * (0.4 * (1<<Q) as f32) as i32) >> Q) + (0.588 * (1<<Q) as f32) as i32;
         let (cos, sin) = cos_sin(((4 * self.frame as i32) << Q) / FRAME_MAX as i32);
         let c_a = (coeff * cos * cos.abs()) >> (2*Q);
         let c_b = (coeff * sin * sin.abs()) >> (2*Q);
