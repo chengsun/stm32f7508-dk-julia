@@ -10,14 +10,6 @@ pub fn fb() -> &'static mut [u8; FB_W*FB_H] {
     unsafe { &mut FB }
 }
 
-#[cfg_attr(feature="real", link_section = ".priority")]
-static mut INVERSES2: [libdivide::Divider; 32*256] = [libdivide::DIVIDER_NULL; 32*256];
-
-#[inline(always)]
-pub fn inverses2() -> &'static mut [libdivide::Divider; 32*256] {
-    unsafe { &mut INVERSES2 }
-}
-
 pub trait Context {
     fn wait_for_line(&mut self, pixel_y: usize);
     fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8);
@@ -47,6 +39,18 @@ pub const FB_H: usize = 272;
 
 const Q: i32 = 10;
 const FRAME_MAX: u32 = 1000;
+
+const MAX_DIST_SQR: i32 = 25;
+const INDEX_MQ: i32 = Q+2;
+const INDEX_LEN: usize = (MAX_DIST_SQR<<(2*Q - INDEX_MQ)) as usize;
+
+#[cfg_attr(feature="real", link_section = ".priority")]
+static mut INVERSES2: [libdivide::Divider; INDEX_LEN] = [libdivide::DIVIDER_NULL; INDEX_LEN];
+
+#[inline(always)]
+pub fn inverses2() -> &'static mut [libdivide::Divider; INDEX_LEN] {
+    unsafe { &mut INVERSES2 }
+}
 
 fn sin_internal(offset: i32) -> i32 {
     assert!(offset >= 0 && offset <= (1<<Q));
@@ -83,8 +87,8 @@ impl Julia {
         for x in 0..(FB_W * FB_H) {
             fb()[x] = 0;
         }
-        for x in 1..32*256 {
-            let div = (((x*x) >> (Q-4)) + 1) as i32;
+        for x in 1..INDEX_LEN {
+            let div = (((x*x) >> (3*Q-2*INDEX_MQ)) + 1) as i32;
             inverses2()[x] = libdivide::gen(div);
         }
         Self { frame: 0 }
@@ -96,8 +100,6 @@ impl Julia {
         let mut b = (((pixel_y as i32)<<1) - (FB_H as i32)) << (Q-8);
         const ITER_MAX: i32 = 12;
         let mut prev_distqq = -120<<(2*Q);
-
-        const MAX_DIST_SQR: i32 = 25;
 
         let mut iter = 0;
 
@@ -137,8 +139,8 @@ impl Julia {
                     context.stats_count_fmuls(1);
                     context.stats_count_mems(1);
                     context.stats_count_shrs(1);
-                    let index = (this_distqq>>(Q+2)) as usize;
-                    if index >= 32*256 {
+                    let index = (this_distqq>>INDEX_MQ) as usize;
+                    if index >= INDEX_LEN {
                         unsafe {
                             core::hint::unreachable_unchecked();
                         }
