@@ -65,6 +65,55 @@ impl Julia {
     pub fn new() -> Self {
         Self { frame: 0 }
     }
+
+    fn compute_value(&self, context: &mut dyn Context, pixel_x: usize, pixel_y: usize, c_a: i32, c_b: i32) -> u8 {
+        let fb_size = core::cmp::min(FB_W, FB_H) as i32;
+        let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
+        let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
+        const ITER_MAX: i32 = 36;
+        let mut final_iter = ITER_MAX<<Q;
+        let mut prev_dist = -40<<Q;
+
+        for iter in 0..ITER_MAX {
+            context.stats_count_muls(1);
+            context.stats_count_shrs(1);
+            let a2 = a*a >> Q;
+
+            context.stats_count_muls(1);
+            context.stats_count_shrs(1);
+            let b2 = b*b >> Q;
+
+            context.stats_count_adds(1);
+            let this_dist = a2+b2;
+
+            context.stats_count_cmps(1);
+            if this_dist >= (4<<Q) {
+
+                context.stats_count_adds(2);
+                context.stats_count_shrs(2);
+                context.stats_count_divs(1);
+                let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
+
+                context.stats_count_adds(1);
+                context.stats_count_shrs(1);
+                final_iter = (iter << Q) - lerp;
+                break;
+            }
+
+            context.stats_count_muls(1);
+            context.stats_count_shrs(1);
+            let two_ab = a*b >> (Q-1);
+
+            context.stats_count_adds(2);
+            a = a2 - b2 + c_a;
+
+            context.stats_count_adds(1);
+            b = two_ab + c_b;
+
+            prev_dist = this_dist;
+        }
+        ((final_iter * 255) / (ITER_MAX << Q)) as u8
+    }
 }
 
 impl Demo for Julia {
@@ -108,54 +157,6 @@ impl Demo for Julia {
         let (cos, sin) = cos_sin(((4 * self.frame as i32) << Q) / FRAME_MAX as i32);
         let c_a = (coeff * cos) >> Q;
         let c_b = (coeff * sin) >> Q;
-        let compute_value = |context: &mut dyn Context, pixel_x, pixel_y| {
-            let fb_size = core::cmp::min(FB_W, FB_H) as i32;
-            let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
-            let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
-            const ITER_MAX: i32 = 36;
-            let mut final_iter = ITER_MAX<<Q;
-            let mut prev_dist = -40<<Q;
-
-            for iter in 0..ITER_MAX {
-                context.stats_count_muls(1);
-                context.stats_count_shrs(1);
-                let a2 = a*a >> Q;
-
-                context.stats_count_muls(1);
-                context.stats_count_shrs(1);
-                let b2 = b*b >> Q;
-
-                context.stats_count_adds(1);
-                let this_dist = a2+b2;
-
-                context.stats_count_cmps(1);
-                if this_dist >= (4<<Q) {
-
-                    context.stats_count_adds(2);
-                    context.stats_count_shrs(2);
-                    context.stats_count_divs(1);
-                    let lerp = ((this_dist - (4<<Q)) << 8) / ((this_dist - prev_dist) >> (Q-8));
-
-                    context.stats_count_adds(1);
-                    context.stats_count_shrs(1);
-                    final_iter = (iter << Q) - lerp;
-                    break;
-                }
-
-                context.stats_count_muls(1);
-                context.stats_count_shrs(1);
-                let two_ab = a*b >> (Q-1);
-
-                context.stats_count_adds(2);
-                a = a2 - b2 + c_a;
-
-                context.stats_count_adds(1);
-                b = two_ab + c_b;
-
-                prev_dist = this_dist;
-            }
-            ((final_iter * 255) / (ITER_MAX << Q)) as u8
-        };
         let average_value = |fb: &[u8; FB_W*FB_H], pixel_x, pixel_y| {
             ((fb[(pixel_y-1) * FB_W + pixel_x] as u32
               + fb[(pixel_y+1) * FB_W + pixel_x] as u32
@@ -167,7 +168,7 @@ impl Demo for Julia {
             let pixel_y = 0;
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
-                let value = compute_value(context, pixel_x, pixel_y);
+                let value = self.compute_value(context, pixel_x, pixel_y, c_a, c_b);
                 context.fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
@@ -176,7 +177,7 @@ impl Demo for Julia {
             if pixel_y < FB_H/2 {
                 let mut pixel_x = pixel_y & 1;
                 while pixel_x < FB_W {
-                    let value = compute_value(context, pixel_x, pixel_y);
+                    let value = self.compute_value(context, pixel_x, pixel_y, c_a, c_b);
                     context.fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
