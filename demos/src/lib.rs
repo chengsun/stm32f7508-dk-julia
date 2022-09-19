@@ -66,7 +66,8 @@ impl Julia {
         Self { frame: 0 }
     }
 
-    fn compute_value(&self, context: &mut dyn Context, pixel_x: usize, pixel_y: usize, c_a: i32, c_b: i32) -> u8 {
+    #[inline(always)]
+    fn compute_value_hot(&self, context: &mut dyn Context, pixel_x: usize, pixel_y: usize, c_a: i32, c_b: i32) -> u8 {
         let fb_size = core::cmp::min(FB_W, FB_H) as i32;
         let mut a = (((pixel_x as i32) << Q) - ((FB_W as i32 - 1) << (Q-1))) * 2 / fb_size;
         let mut b = (((pixel_y as i32) << Q) - ((FB_H as i32 - 1) << (Q-1))) * 2 / fb_size;
@@ -113,6 +114,11 @@ impl Julia {
             prev_dist = this_dist;
         }
         ((final_iter * 255) / (ITER_MAX << Q)) as u8
+    }
+
+    #[inline(never)]
+    fn compute_value_cold(&self, context: &mut dyn Context, pixel_x: usize, pixel_y: usize, c_a: i32, c_b: i32) -> u8 {
+        self.compute_value_hot(context, pixel_x, pixel_y, c_a, c_b)
     }
 }
 
@@ -168,7 +174,7 @@ impl Demo for Julia {
             let pixel_y = 0;
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
-                let value = self.compute_value(context, pixel_x, pixel_y, c_a, c_b);
+                let value = self.compute_value_cold(context, pixel_x, pixel_y, c_a, c_b);
                 context.fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
@@ -177,7 +183,7 @@ impl Demo for Julia {
             if pixel_y < FB_H/2 {
                 let mut pixel_x = pixel_y & 1;
                 while pixel_x < FB_W {
-                    let value = self.compute_value(context, pixel_x, pixel_y, c_a, c_b);
+                    let value = self.compute_value_hot(context, pixel_x, pixel_y, c_a, c_b);
                     context.fb()[pixel_y * FB_W + pixel_x] = value;
                     pixel_x += 2;
                 }
