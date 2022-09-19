@@ -43,3 +43,11 @@
     cd emulated
     cargo run --release
     ```
+# License and acknowledgements
+
+This project is licensed under the zlib license.
+
+The file `demos/src/libdivide.rs` is very heavily modified code that originated
+from [libdivide](https://libdivide.com), and its Rust port
+[rust-divide](https://github.com/youknowone/rust-divide), which are licensed
+under the zlib license.
