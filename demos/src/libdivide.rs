@@ -86,5 +86,6 @@ pub fn gen(d: i32) -> Divider {
 }
 
 pub fn div(numer: i32, denom: &Divider) -> i32 {
+    if denom.more >= 32 { unsafe { core::hint::unreachable_unchecked(); } }
     mullhi(denom.magic, numer) >> denom.more
 }
