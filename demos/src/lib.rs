@@ -123,7 +123,7 @@ impl Julia {
 
                 context.stats_count_shrs(1);
                 context.stats_count_cmps(1);
-                if this_distqq >> (2*Q-5) == 0 {
+                if this_distqq < 7<<(2*Q-8) {
                     return 255;
                 }
 
