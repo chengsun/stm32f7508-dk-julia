@@ -55,8 +55,6 @@ pub const DIVIDER_NULL: Divider = Divider {
 // In s32 and s64 branchfree modes, the magic number is negated according to
 // whether the divisor is negated. In branchfree strategy, it is not negated.
 
-const SHIFT_MASK: u8 = 0x1F;
-
 #[inline]
 fn mullhi(x: i32, y: i32) -> i32 {
     let x = i64::from(x);
@@ -105,9 +103,7 @@ pub fn gen(d: i32) -> Divider {
 }
 
 pub fn div(numer: i32, denom: &Divider) -> i32 {
-    let more = denom.more;
-    let shift = more & SHIFT_MASK;
-
+    let shift = denom.more;
     let q = if 0 == denom.magic { numer } else { mullhi(denom.magic, numer) };
     q >> shift
 }
