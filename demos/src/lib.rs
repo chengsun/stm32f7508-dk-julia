@@ -169,6 +169,7 @@ impl Julia {
         iteration!();
         iteration!();
         assert!(iter == ITER_MAX);
+        let _ = (a, b, prev_distqq);
 
         255
     }
