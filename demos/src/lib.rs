@@ -129,7 +129,13 @@ impl Julia {
                 context.stats_count_fmuls(1);
                 context.stats_count_mems(1);
                 context.stats_count_shrs(1);
-                ((x as f32) * inverses()[(this_distqq>>(Q+2)) as usize]) as i32
+                let index = (this_distqq>>(Q+2)) as usize;
+                if index >= 32*256 {
+                    unsafe {
+                        core::hint::unreachable_unchecked();
+                    }
+                }
+                ((x as f32) * inverses()[index]) as i32
 
                 /*
                 context.stats_count_shrs(2);
