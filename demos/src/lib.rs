@@ -1,5 +1,7 @@
 #![cfg_attr(feature="real", no_std)]
 
+mod libdivide;
+
 #[cfg_attr(feature="real", link_section = ".fb")]
 static mut FB: [u8; FB_W*FB_H] = [0; FB_W*FB_H];
 
@@ -9,10 +11,10 @@ pub fn fb() -> &'static mut [u8; FB_W*FB_H] {
 }
 
 #[cfg_attr(feature="real", link_section = ".priority")]
-static mut INVERSES2: [f32; 32*256] = [0f32; 32*256];
+static mut INVERSES2: [libdivide::Divider; 32*256] = [libdivide::DIVIDER_NULL; 32*256];
 
 #[inline(always)]
-pub fn inverses2() -> &'static mut [f32; 32*256] {
+pub fn inverses2() -> &'static mut [libdivide::Divider; 32*256] {
     unsafe { &mut INVERSES2 }
 }
 
@@ -81,9 +83,9 @@ impl Julia {
         for x in 0..(FB_W * FB_H) {
             fb()[x] = 0;
         }
-        for x in 0..32*256 {
-            let inv = (1 << (Q-2)) as f32 / (x as f32);
-            inverses2()[x] = inv * inv * (1. / (1<<Q) as f32);
+        for x in 1..32*256 {
+            let div = (((x*x) >> (Q-4)) + 1) as i32;
+            inverses2()[x] = libdivide::gen(div);
         }
         Self { frame: 0 }
     }
@@ -141,7 +143,8 @@ impl Julia {
                             core::hint::unreachable_unchecked();
                         }
                     }
-                    ((x as f32) * inverses2()[index]) as i32
+                    let div = &inverses2()[index];
+                    libdivide::div(x, div)
                 };
 
                 context.stats_count_muls(1);
