@@ -80,7 +80,7 @@ impl Julia {
     pub fn new() -> Self {
         for x in 0..32*256 {
             let inv = (1 << (Q-2)) as f32 / (x as f32);
-            inverses2()[x] = inv * inv * (1. / (1 << (Q-1)) as f32);
+            inverses2()[x] = inv * inv * (1. / (1<<Q) as f32);
         }
         Self { frame: 0 }
     }
@@ -142,11 +142,11 @@ impl Julia {
                 };
 
                 context.stats_count_muls(1);
-                let two_aibi = div_dist2(context, a*b);
+                let two_aibi = div_dist2(context, 2*a*b);
 
                 context.stats_count_adds(2);
                 context.stats_count_shrs(1);
-                a = ((div_dist2(context, a2qq - b2qq)) >> 1) + c_a;
+                a = (div_dist2(context, a2qq - b2qq)) + c_a;
 
                 context.stats_count_adds(1);
                 b = c_b - two_aibi;
