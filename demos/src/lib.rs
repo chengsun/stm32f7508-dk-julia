@@ -92,7 +92,7 @@ impl Julia {
         const ITER_MAX: i32 = 12;
         let mut prev_distqq = -120<<(2*Q);
 
-        const MAX_DIST_SQR: i32 = 32;
+        const MAX_DIST_SQR: i32 = 25;
 
         let mut iter = 0;
 
