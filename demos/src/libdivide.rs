@@ -55,8 +55,6 @@ pub const DIVIDER_NULL: Divider = Divider {
 // In s32 and s64 branchfree modes, the magic number is negated according to
 // whether the divisor is negated. In branchfree strategy, it is not negated.
 
-const ADD_MARKER: u8 = 0x40;
-const NEGATIVE_DIVISOR: u8 = 0x80;
 const SHIFT_MASK: u8 = 0x1F;
 
 #[inline]
@@ -69,11 +67,7 @@ fn mullhi(x: i32, y: i32) -> i32 {
         .unwrap_or_else(|_| unsafe { core::hint::unreachable_unchecked() })
 }
 
-pub fn gen(sself: i32) -> Divider {
-    internal_gen(sself, false)
-}
-
-fn internal_gen(d: i32, branchfree: bool) -> Divider {
+pub fn gen(d: i32) -> Divider {
     assert!(d > 0);
 
     // If d is a power of 2, or negative a power of 2, we have to use a shift.
@@ -87,44 +81,24 @@ fn internal_gen(d: i32, branchfree: bool) -> Divider {
     // check if exactly one bit is set,
     // don't care if abs_d is 0 since that's divide by zero
     if (abs_d & (abs_d - 1)) == 0 {
-        // Branchfree and normal paths are exactly the same
         Divider {
             magic: 0,
-            more: floor_log_2_d as u8 | if d < 0 { NEGATIVE_DIVISOR } else { 0 },
+            more: floor_log_2_d as u8,
         }
     } else {
         assert!(floor_log_2_d >= 1);
 
         // the dividend here is 2**(floor_log_2_d + 31), so the low 32 bit word
         // is 0 and the high word is floor_log_2_d - 1
-        let (proposed_m, rem) = {
+        let magic = {
             let q = 1u64 << (floor_log_2_d + 31);
             let r = abs_d as u64;
-            (q / r, q % r)
+            (q / r + 1) as i32
         };
-        let mut proposed_m = proposed_m as u32;
-        let rem = rem as u32;
-        let e = abs_d - rem;
 
         // We are going to start with a power of floor_log_2_d - 1.
         // This works if works if e < 2**floor_log_2_d.
-        let more = if !branchfree && e < (1 << floor_log_2_d) {
-            // This power works
-            (floor_log_2_d - 1) as u8
-        } else {
-            // We need to go one higher. This should not make proposed_m
-            // overflow, but it will make it negative when interpreted as an
-            // int32_t.
-            proposed_m = proposed_m.wrapping_add(proposed_m);
-            let twice_rem = rem.wrapping_add(rem);
-            if twice_rem >= abs_d || twice_rem < rem {
-                proposed_m += 1;
-            }
-            floor_log_2_d as u8 | ADD_MARKER
-        };
-
-        proposed_m += 1;
-        let magic = proposed_m as i32;
+        let more = (floor_log_2_d - 1) as u8;
 
         Divider { magic, more }
     }
@@ -134,15 +108,6 @@ pub fn div(numer: i32, denom: &Divider) -> i32 {
     let more = denom.more;
     let shift = more & SHIFT_MASK;
 
-    if 0 == denom.magic {
-        numer >> shift
-    } else {
-        let mut uq = mullhi(denom.magic, numer) as u32;
-        if 0 != (more & ADD_MARKER) {
-            // q += (more < 0 ? -numer : numer)
-            // cast required to avoid UB
-            uq = uq.wrapping_add(numer as u32);
-        }
-        (uq as i32) >> shift
-    }
+    let q = if 0 == denom.magic { numer } else { mullhi(denom.magic, numer) };
+    q >> shift
 }

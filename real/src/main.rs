@@ -100,8 +100,8 @@ fn main() -> ! {
         // PLLSAI output = 16MHz * PLLSAIN / PLLM / PLLSAIR / PLLSAIDIVR = 16MHz * 54 / 8 / 3 / 4
         // 50 <= PLLSAIN <= 432
         // 2 <= PLLSAIR <= 7
-        let pllsain = 91;
-        let pllsair = 7;
+        let pllsain = 74;
+        let pllsair = 5;
         let pllsaidivr = 8;
         rcc.pllsaicfgr.write(|w| unsafe {
             w.pllsain().bits(pllsain).pllsair().bits(pllsair)
