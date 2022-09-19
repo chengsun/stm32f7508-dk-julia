@@ -78,6 +78,9 @@ pub struct Julia {
 
 impl Julia {
     pub fn new() -> Self {
+        for x in 0..(FB_W * FB_H) {
+            fb()[x] = 0;
+        }
         for x in 0..32*256 {
             let inv = (1 << (Q-2)) as f32 / (x as f32);
             inverses2()[x] = inv * inv * (1. / (1<<Q) as f32);
