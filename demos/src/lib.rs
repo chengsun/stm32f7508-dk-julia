@@ -76,6 +76,15 @@ fn rotate_2d(x: i32, y: i32, cos: i32, sin: i32) -> (i32, i32) {
     ((cos * x + sin * y) >> Q, (cos * y - sin * x) >> Q)
 }
 
+fn frotate_2d(p: (f64, f64), angle: f64) -> (f64, f64) {
+    let (sin, cos) = angle.sin_cos();
+    (cos * p.0 + sin * p.1, cos * p.1 - sin * p.0)
+}
+
+fn floor_mod(x: f64, y: f64) -> f64 {
+    x - y * (x / y).floor()
+}
+
 pub struct Julia {
     rotate_frame: u32,
     translate_frame: u32,
@@ -89,8 +98,73 @@ impl Julia {
         Self { rotate_frame: 0, translate_frame: 0 }
     }
 
+    fn lookup(&self,mut x:f64,mut y:f64,mut z:f64) -> (f64,f64,f64,f64) {
+                let mut min_distance : f64 = 100.;
+                let mut accum = 1.;
+
+                for _ in 0..20 {
+                    x = floor_mod(x, 2.) - 1.;
+                    y = floor_mod(y, 2.) - 1.;
+                    z = floor_mod(z, 2.) - 1.;
+
+                    (y, z) = frotate_2d((y, z), core::f64::consts::PI / 4.);
+
+                    let sqr_distance = x*x + y*y + z*z;
+                    let this_distance = sqr_distance.sqrt();
+                    let this_accum = (sqr_distance / 2.).min(1.);
+
+                    min_distance = min_distance.min(this_distance);
+
+                    accum *= this_accum;
+                    x = x / this_accum - 1.;
+                    y = y / this_accum - 1.;
+                    z = z / this_accum - 1.;
+                }
+
+                let base_color_r = 1.75 + (3. * min_distance * 0.9).sin();
+                let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
+                let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
+
+                let accum_color_r = 0.0234 * base_color_r / (accum * 32.).exp();
+                let accum_color_g = 0.0234 * base_color_g / (accum * 32.).exp();
+                let accum_color_b = 0.0234 * base_color_b / (accum * 32.).exp();
+
+                accum = accum.min(1.);
+
+        return (accum_color_r, accum_color_g, accum_color_b, accum);
+    }
+
     fn compute_value(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
         const ITER_MAX: i32 = 17;
+
+        let q = (1<<Q) as f64;
+        let ray_direction_x = (ray_direction_x as f64) / q;
+        let ray_direction_y = (ray_direction_y as f64) / q;
+        let ray_direction_z = (ray_direction_z as f64) / q;
+        let translate_z = (translate_z as f64) / q;
+
+        let mut ray_len = 0.;
+        let mut frag_color_r = 0.;
+        let mut frag_color_g = 0.;
+        let mut frag_color_b = 0.;
+
+        for _ in 0..ITER_MAX {
+            let mut p_x = ray_direction_x * ray_len;
+            let mut p_y = ray_direction_y * ray_len;
+            let mut p_z = ray_direction_z * ray_len;
+            p_z += translate_z;
+            let lookup_result = self.lookup(p_x, p_y, p_z);
+            frag_color_r += lookup_result.0;
+            frag_color_g += lookup_result.1;
+            frag_color_b += lookup_result.2;
+            ray_len += lookup_result.3 / 8.;
+        }
+
+        let r = (frag_color_r * 255.9999) as u32;
+        let g = (frag_color_g * 255.9999) as u32;
+        let b = (frag_color_b * 255.9999) as u32;
+
+        /*
 
         let mut ray_len = 0u32;
         let mut frag_color = 0u32;
@@ -113,6 +187,7 @@ impl Julia {
         let r = (frag_color >> 16) & 0xFF;
         let g = (frag_color >> 8) & 0xFF;
         let b = (frag_color >> 0) & 0xFF;
+        */
         (((r >> 3) << 11) | ((g >> 2) << 5) | ((b >> 3) << 0)) as u16
     }
 }
