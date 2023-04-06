@@ -100,10 +100,10 @@ impl Julia {
             let mut p_y = (ray_direction_y * ray_len) >> Q;
             let mut p_z = (ray_direction_z * ray_len) >> Q;
             p_z += translate_z;
-            p_x = (p_x + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
-            p_y = (p_y + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
-            p_z = (p_z + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
-            let index = ((p_z >> (Q-7)) * 128 * 128 + (p_y >> (Q-7)) * 128 + (p_x >> (Q-7))) as usize;
+            p_x = (p_x + (1<<Q)) & ((2<<Q) - 1);
+            p_y = (p_y + (1<<Q)) & ((2<<Q) - 1);
+            p_z = (p_z + (1<<Q)) & ((2<<Q) - 1);
+            let index = ((p_z >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_x >> (Q+1-7))) as usize;
             let lookup_result = LOOKUP_TABLE[index];
             ray_len += ((lookup_result >> 24) as i32) << (Q-8);
             frag_color += lookup_result & 0xFFFFFF;

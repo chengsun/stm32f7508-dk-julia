@@ -22,12 +22,12 @@ fn main() {
         "static LOOKUP_TABLE: [u32; 128*128*128] = [\n"
     ).unwrap();
 
-    for x in 0..128 {
-        let mut x = (x as f64 - 63.5) / 64.;
-        for y in 0..128 {
-            let mut y = (y as f64 - 63.5) / 64.;
-            for z in 0..128 {
-                let mut z = (z as f64 - 63.5) / 64.;
+    for x in -64..64 {
+        let mut x = (x as f64) / 64.;
+        for y in -64..64 {
+            let mut y = (y as f64) / 64.;
+            for z in -64..64 {
+                let mut z = (z as f64) / 64.;
 
                 let mut min_distance : f64 = 100.;
                 let mut accum = 1.;
