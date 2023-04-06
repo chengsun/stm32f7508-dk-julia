@@ -58,11 +58,11 @@ fn main() {
         "static LOOKUP_TABLE: [u32; 128*128*128] = [\n"
     ).unwrap();
 
-    for x in -64..64 {
+    for x in 0..128 {
         let x = (x as f64) / 64.;
-        for y in -64..64 {
+        for y in 0..128 {
             let y = (y as f64) / 64.;
-            for z in -64..64 {
+            for z in 0..128 {
                 let z = (z as f64) / 64.;
 
                 let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup(x, y, z);

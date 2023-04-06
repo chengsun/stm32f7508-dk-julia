@@ -94,9 +94,9 @@ impl Julia {
             let mut p_y = (ray_direction_y * ray_len as i32) >> Q;
             let mut p_z = (ray_direction_z * ray_len as i32) >> Q;
             p_z += translate_z;
-            p_x = (p_x + (1<<Q)) & ((2<<Q) - 1);
-            p_y = (p_y + (1<<Q)) & ((2<<Q) - 1);
-            p_z = (p_z + (1<<Q)) & ((2<<Q) - 1);
+            p_x = p_x & ((2<<Q) - 1);
+            p_y = p_y & ((2<<Q) - 1);
+            p_z = p_z & ((2<<Q) - 1);
             let index = ((p_x >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_z >> (Q+1-7))) as usize;
             let lookup_result = LOOKUP_TABLE[index];
             let distance = ((lookup_result >> 24) as u32) << (Q-8);
