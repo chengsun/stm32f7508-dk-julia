@@ -39,9 +39,9 @@ fn lookup(mut x: f64, mut y: f64, mut z: f64) -> (f64, f64, f64, f64) {
     let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
     let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
 
-    let accum_color_r = 0.0234 * base_color_r / (accum * 32.).exp();
-    let accum_color_g = 0.0234 * base_color_g / (accum * 32.).exp();
-    let accum_color_b = 0.0234 * base_color_b / (accum * 32.).exp();
+    let accum_color_r = 0.0227 * base_color_r / (accum * 32.).exp();
+    let accum_color_g = 0.0227 * base_color_g / (accum * 32.).exp();
+    let accum_color_b = 0.0227 * base_color_b / (accum * 32.).exp();
 
     accum = accum.min(1.);
 
