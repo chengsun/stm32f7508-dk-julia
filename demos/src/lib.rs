@@ -92,20 +92,21 @@ impl Julia {
     fn compute_value(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
         const ITER_MAX: i32 = 17;
 
-        let mut ray_len = 0;
+        let mut ray_len = 0u32;
         let mut frag_color = 0u32;
 
         for _ in 0..ITER_MAX {
-            let mut p_x = (ray_direction_x * ray_len) >> Q;
-            let mut p_y = (ray_direction_y * ray_len) >> Q;
-            let mut p_z = (ray_direction_z * ray_len) >> Q;
+            let mut p_x = (ray_direction_x * ray_len as i32) >> Q;
+            let mut p_y = (ray_direction_y * ray_len as i32) >> Q;
+            let mut p_z = (ray_direction_z * ray_len as i32) >> Q;
             p_z += translate_z;
             p_x = (p_x + (1<<Q)) & ((2<<Q) - 1);
             p_y = (p_y + (1<<Q)) & ((2<<Q) - 1);
             p_z = (p_z + (1<<Q)) & ((2<<Q) - 1);
-            let index = ((p_z >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_x >> (Q+1-7))) as usize;
+            let index = ((p_x >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_z >> (Q+1-7))) as usize;
             let lookup_result = LOOKUP_TABLE[index];
-            ray_len += ((lookup_result >> 24) as i32) >> (3+8-Q);
+            let distance = ((lookup_result >> 24) as u32) << (Q-8);
+            ray_len += distance >> 3;
             frag_color += lookup_result & 0xFFFFFF;
         }
 
@@ -133,7 +134,6 @@ impl Demo for Julia {
         }
 
         let translate_z = ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
-                println!("{}\n", translate_z);
 
         let (rotate_cos, rotate_sin) = cos_sin(((4 * self.rotate_frame as i32) << Q) / ROTATE_FRAME_MAX as i32);
         for pixel_y in 0..FB_H {
