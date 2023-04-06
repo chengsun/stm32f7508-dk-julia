@@ -19,7 +19,7 @@ fn main() {
     let mut file = BufWriter::new(fs::File::create(&dest_path).unwrap());
 
     write!(file,
-        "const LOOKUP_TABLE: [u32; 128*128*128] = [\n"
+        "static LOOKUP_TABLE: [u32; 128*128*128] = [\n"
     ).unwrap();
 
     for x in 0..128 {

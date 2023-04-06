@@ -89,62 +89,32 @@ impl Julia {
         Self { rotate_frame: 0, translate_frame: 0 }
     }
 
-    #[inline(always)]
-    fn compute_value_hot(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32) -> u16 {
+    fn compute_value(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32) -> u16 {
         const ITER_MAX: i32 = 17;
 
-        let mut iter = 0;
         let mut ray_len = 0;
         let mut frag_color = 0;
 
-        macro_rules! iteration {
-            () => {
-                let p_x = (ray_direction_x * ray_len) >> Q;
-                let p_y = (ray_direction_y * ray_len) >> Q;
-                let p_z = (ray_direction_z * ray_len) >> Q + (self.translate_frame as i32 * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
-                let lookup_result = LOOKUP_TABLE[((p_z >> (Q-7)) * 128 * 128 + (p_y >> (Q-7)) * 128 + (p_x >> (Q-7))) as usize];
-                ray_len += ((lookup_result >> 24) as i32) << (Q-8);
-                frag_color += lookup_result & 0xFFFFFF;
-                iter += 1;
-            }
+        for _ in 0..ITER_MAX {
+            let mut p_x = (ray_direction_x * ray_len) >> Q;
+            let mut p_y = (ray_direction_y * ray_len) >> Q;
+            let mut p_z = (ray_direction_z * ray_len) >> Q;
+            p_z += ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
+            p_x = (p_x + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
+            p_y = (p_y + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
+            p_z = (p_z + (1<<Q)) & ((2<<Q) - 1) - (1<<Q);
+            let index = ((p_z >> (Q-7)) * 128 * 128 + (p_y >> (Q-7)) * 128 + (p_x >> (Q-7))) as usize;
+            let lookup_result = LOOKUP_TABLE[index];
+            ray_len += ((lookup_result >> 24) as i32) << (Q-8);
+            frag_color += lookup_result & 0xFFFFFF;
         }
-
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        iteration!();
-        assert!(iter == ITER_MAX);
 
         let r = (frag_color >> 16) & 0xFF;
         let g = (frag_color >> 8) & 0xFF;
-        let b = (frag_color >> 8) & 0xFF;
+        let b = (frag_color >> 0) & 0xFF;
         (((r >> 3) << 11) | ((g >> 2) << 5) | ((b >> 3) << 0)) as u16
     }
-
-    #[inline(never)]
-    fn compute_value_cold(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32) -> u16 {
-        self.compute_value_hot(context, ray_direction_x, ray_direction_y, ray_direction_z)
-    }
 }
-
-/* complex exponentiation by -2:
-    float bmag2 = dot(b, b);
-    vec2 binv = b/vec2(bmag2);
-    return vec2((binv.x*binv.x - binv.y*binv.y), -2.*binv.x*binv.y);
-*/
 
 impl Demo for Julia {
     fn pre_render(&mut self, context: &mut dyn Context) {
@@ -166,14 +136,14 @@ impl Demo for Julia {
         for pixel_y in 0..FB_H {
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
-                let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) / FB_H as i32) << Q;
-                let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) / FB_H as i32) << Q;
+                let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << Q) / (FB_H as i32);
+                let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << Q) / (FB_H as i32);
                 let mut ray_direction_z = 1 << Q;
 
                 (ray_direction_x, ray_direction_z) = rotate_2d(ray_direction_x, ray_direction_z, rotate_cos, rotate_sin);
                 (ray_direction_y, ray_direction_z) = rotate_2d(ray_direction_y, ray_direction_z, rotate_cos, rotate_sin);
 
-                let value = self.compute_value_hot(context, ray_direction_x, ray_direction_y, ray_direction_z);
+                let value = self.compute_value(context, ray_direction_x, ray_direction_y, ray_direction_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
