@@ -12,6 +12,42 @@ fn floor_mod(x: f64, y: f64) -> f64 {
     x - y * (x / y).floor()
 }
 
+fn lookup(mut x: f64, mut y: f64, mut z: f64) -> (f64, f64, f64, f64) {
+    let mut min_distance : f64 = 100.;
+    let mut accum = 1.;
+
+    for _ in 0..20 {
+        x = floor_mod(x, 2.) - 1.;
+        y = floor_mod(y, 2.) - 1.;
+        z = floor_mod(z, 2.) - 1.;
+
+        (y, z) = rotate_2d((y, z), core::f64::consts::PI / 4.);
+
+        let sqr_distance = x*x + y*y + z*z;
+        let this_distance = sqr_distance.sqrt();
+        let this_accum = sqr_distance / 2.;
+
+        min_distance = min_distance.min(this_distance);
+
+        accum *= this_accum;
+        x = x / this_accum - 1.;
+        y = y / this_accum - 1.;
+        z = z / this_accum - 1.;
+    }
+
+    let base_color_r = 1.75 + (3. * min_distance * 0.9).sin();
+    let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
+    let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
+
+    let accum_color_r = 0.0234 * base_color_r / (accum * 32.).exp();
+    let accum_color_g = 0.0234 * base_color_g / (accum * 32.).exp();
+    let accum_color_b = 0.0234 * base_color_b / (accum * 32.).exp();
+
+    accum = accum.min(1.);
+
+    return (accum_color_r, accum_color_g, accum_color_b, accum);
+}
+
 fn main() {
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("lookup_table.rs");
@@ -22,44 +58,16 @@ fn main() {
         "static LOOKUP_TABLE: [u32; 128*128*128] = [\n"
     ).unwrap();
 
+    let mut i = 0;
+
     for x in -64..64 {
-        let mut x = (x as f64) / 64.;
+        let x = (x as f64) / 64.;
         for y in -64..64 {
-            let mut y = (y as f64) / 64.;
+            let y = (y as f64) / 64.;
             for z in -64..64 {
-                let mut z = (z as f64) / 64.;
+                let z = (z as f64) / 64.;
 
-                let mut min_distance : f64 = 100.;
-                let mut accum = 1.;
-
-                for _ in 0..20 {
-                    x = floor_mod(x, 2.) - 1.;
-                    y = floor_mod(y, 2.) - 1.;
-                    z = floor_mod(z, 2.) - 1.;
-
-                    (y, z) = rotate_2d((y, z), core::f64::consts::PI / 4.);
-
-                    let sqr_distance = x*x + y*y + z*z;
-                    let this_distance = sqr_distance.sqrt();
-                    let this_accum = sqr_distance / 2.;
-
-                    min_distance = min_distance.min(this_distance);
-
-                    accum *= this_accum;
-                    x = x / this_accum - 1.;
-                    y = y / this_accum - 1.;
-                    z = z / this_accum - 1.;
-                }
-
-                let base_color_r = 1.75 + (3. * min_distance * 0.9).sin();
-                let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
-                let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
-
-                let accum_color_r = 0.0234 * base_color_r / (accum * 32.).exp();
-                let accum_color_g = 0.0234 * base_color_g / (accum * 32.).exp();
-                let accum_color_b = 0.0234 * base_color_b / (accum * 32.).exp();
-
-                accum = accum.min(1.);
+                let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup(x, y, z);
 
                 write!(file,
                        "  0x{:08x},\n",
@@ -68,6 +76,8 @@ fn main() {
                     (((accum_color_g * 255.9999) as u32) << 8) |
                     (((accum_color_b * 255.9999) as u32) << 0)
                 ).unwrap();
+
+                i += 1;
             }
         }
     }

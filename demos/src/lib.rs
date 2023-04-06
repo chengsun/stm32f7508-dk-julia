@@ -148,11 +148,12 @@ impl Julia {
             let mut p_z = ray_direction_z * ray_len;
             p_z += translate_z;
 
-            let lookup_result = LOOKUP_TABLE[
-                (((floor_mod(p_x+1.,2.)) * 64.) as usize * 128*128) +
-                (((floor_mod(p_y+1.,2.)) * 64.) as usize * 128) +
-                (((floor_mod(p_z+1.,2.)) * 64.) as usize)
-            ];
+            let i_x = ((floor_mod(p_x+1.,2.)) * 64.) as i32;
+            let i_y = ((floor_mod(p_y+1.,2.)) * 64.) as i32;
+            let i_z = ((floor_mod(p_z+1.,2.)) * 64.) as i32;
+
+            let index = (i_x as usize * 128*128) + (i_y as usize * 128) + (i_z as usize);
+            let lookup_result = LOOKUP_TABLE[index];
             let lookup_result =
                 (
         ((lookup_result >> 16) & 0xFF) as f64 / 255.9999,
@@ -161,8 +162,17 @@ impl Julia {
         ((lookup_result >> 24) & 0xFF) as f64 / 255.9999,
            );
 
+            let p2_x = (i_x - 64) as f64 / 64.;
+            let p2_y = (i_y - 64) as f64 / 64.;
+            let p2_z = (i_z - 64) as f64 / 64.;
 
-            //let lookup_result = self.lookup(p_x, p_y, p_z);
+            let lookup_result2 = self.lookup(p2_x, p2_y, p2_z);
+
+            if (lookup_result2.3 - lookup_result.3).abs() > 0.6 {
+                panic!("{} {} {} ({} {} {}) -> {} ({}) {}", p_x, p_y, p_z, p2_x, p2_y, p2_z, lookup_result.3, index, lookup_result2.3);
+            }
+
+
 
             frag_color_r += lookup_result.0;
             frag_color_g += lookup_result.1;
@@ -222,16 +232,15 @@ impl Demo for Julia {
             self.translate_frame = 0;
         }
 
-        let rotate_theta = core::f64::consts::PI * (self.rotate_frame as f64) / (2. * ROTATE_FRAME_MAX as f64);
-        let translate_z = (self.translate_frame as f64) * 2. / (TRANSLATE_FRAME_MAX as f64);
+        //let rotate_theta = core::f64::consts::PI * (self.rotate_frame as f64) / (2. * ROTATE_FRAME_MAX as f64);
+        //let translate_z = (self.translate_frame as f64) * 2. / (TRANSLATE_FRAME_MAX as f64);
 
-        //let (rotate_cos, rotate_sin) = cos_sin(((4 * self.rotate_frame as i32) << Q) / ROTATE_FRAME_MAX as i32);
-        //let translate_z = ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
+        let (rotate_cos, rotate_sin) = cos_sin(((4 * self.rotate_frame as i32) << Q) / ROTATE_FRAME_MAX as i32);
+        let translate_z = ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
 
         for pixel_y in 0..FB_H {
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
-                /*
                 let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << Q) / (FB_H as i32);
                 let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << Q) / (FB_H as i32);
                 let mut ray_direction_z = 1 << Q;
@@ -241,8 +250,8 @@ impl Demo for Julia {
 
                 let value = self.compute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
-                */
 
+                /*
                 let mut ray_direction_x = ((pixel_x as f64) * 2. - (FB_W as f64)) / (FB_H as f64);
                 let mut ray_direction_y = ((pixel_y as f64) * 2. - (FB_H as f64)) / (FB_H as f64);
                 let mut ray_direction_z = 1.;
@@ -252,6 +261,7 @@ impl Demo for Julia {
 
                 let value = self.fcompute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
+                */
             }
         }
     }
