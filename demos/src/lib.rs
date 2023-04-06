@@ -105,7 +105,7 @@ impl Julia {
             p_z = (p_z + (1<<Q)) & ((2<<Q) - 1);
             let index = ((p_z >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_x >> (Q+1-7))) as usize;
             let lookup_result = LOOKUP_TABLE[index];
-            ray_len += ((lookup_result >> 24) as i32) << (Q-8);
+            ray_len += ((lookup_result >> 24) as i32) >> (3+8-Q);
             frag_color += lookup_result & 0xFFFFFF;
         }
 
