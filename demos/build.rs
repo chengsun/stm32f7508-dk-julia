@@ -41,7 +41,7 @@ fn main() {
 
                     let sqr_distance = x*x + y*y + z*z;
                     let this_distance = sqr_distance.sqrt();
-                    let this_accum = (sqr_distance / 2.).min(1.);
+                    let this_accum = sqr_distance / 2.;
 
                     min_distance = min_distance.min(this_distance);
 

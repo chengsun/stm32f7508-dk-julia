@@ -111,7 +111,7 @@ impl Julia {
 
                     let sqr_distance = x*x + y*y + z*z;
                     let this_distance = sqr_distance.sqrt();
-                    let this_accum = (sqr_distance / 2.);
+                    let this_accum = sqr_distance / 2.;
 
                     min_distance = min_distance.min(this_distance);
 
@@ -135,7 +135,6 @@ impl Julia {
     }
 
     fn fcompute_value(&self, context: &mut dyn Context, ray_direction_x: f64, ray_direction_y: f64, ray_direction_z: f64, translate_z: f64) -> u16 {
-
         const ITER_MAX: i32 = 17;
 
         let mut ray_len = 0.;
@@ -163,16 +162,7 @@ impl Julia {
     }
 
     fn compute_value(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
-
-        let q = (1<<Q) as f64;
-        let ray_direction_x = (ray_direction_x as f64) / q;
-        let ray_direction_y = (ray_direction_y as f64) / q;
-        let ray_direction_z = (ray_direction_z as f64) / q;
-        let translate_z = (translate_z as f64) / q;
-
-        self.fcompute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z)
-
-        /*
+        const ITER_MAX: i32 = 17;
 
         let mut ray_len = 0u32;
         let mut frag_color = 0u32;
@@ -195,7 +185,8 @@ impl Julia {
         let r = (frag_color >> 16) & 0xFF;
         let g = (frag_color >> 8) & 0xFF;
         let b = (frag_color >> 0) & 0xFF;
-        */
+
+        (((r >> 3) << 11) | ((g >> 2) << 5) | ((b >> 3) << 0)) as u16
     }
 }
 
@@ -215,15 +206,26 @@ impl Demo for Julia {
             self.translate_frame = 0;
         }
 
+        //let rotate_theta = core::f64::consts::PI * (self.rotate_frame as f64) / (2. * ROTATE_FRAME_MAX as f64);
+        //let translate_z = (self.translate_frame as f64) * 2. / (TRANSLATE_FRAME_MAX as f64);
 
-        let rotate_theta = core::f64::consts::PI * (self.rotate_frame as f64) / (2. * ROTATE_FRAME_MAX as f64);
-        let translate_z = (self.translate_frame as f64) * 2. / (TRANSLATE_FRAME_MAX as f64);
+        let (rotate_cos, rotate_sin) = cos_sin(((4 * self.rotate_frame as i32) << Q) / ROTATE_FRAME_MAX as i32);
+        let translate_z = ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
 
-        //let translate_z = ((self.translate_frame as i32) * (2 << Q) / TRANSLATE_FRAME_MAX as i32);
-        //let (rotate_cos, rotate_sin) = cos_sin(((4 * self.rotate_frame as i32) << Q) / ROTATE_FRAME_MAX as i32);
         for pixel_y in 0..FB_H {
             context.wait_for_line(pixel_y);
             for pixel_x in 0..FB_W {
+                let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << Q) / (FB_H as i32);
+                let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << Q) / (FB_H as i32);
+                let mut ray_direction_z = 1 << Q;
+
+                (ray_direction_x, ray_direction_z) = rotate_2d(ray_direction_x, ray_direction_z, rotate_cos, rotate_sin);
+                (ray_direction_y, ray_direction_z) = rotate_2d(ray_direction_y, ray_direction_z, rotate_cos, rotate_sin);
+
+                let value = self.compute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
+                fb()[pixel_y * FB_W + pixel_x] = value;
+
+                /*
                 let mut ray_direction_x = ((pixel_x as f64) * 2. - (FB_W as f64)) / (FB_H as f64);
                 let mut ray_direction_y = ((pixel_y as f64) * 2. - (FB_H as f64)) / (FB_H as f64);
                 let mut ray_direction_z = 1.;
@@ -231,18 +233,9 @@ impl Demo for Julia {
                 (ray_direction_x, ray_direction_z) = frotate_2d((ray_direction_x, ray_direction_z), rotate_theta);
                 (ray_direction_y, ray_direction_z) = frotate_2d((ray_direction_y, ray_direction_z), rotate_theta);
 
-
-                /*
-                let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << Q) / (FB_H as i32);
-                let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << Q) / (FB_H as i32);
-                let mut ray_direction_z = 1 << Q;
-
-                (ray_direction_x, ray_direction_z) = rotate_2d(ray_direction_x, ray_direction_z, rotate_cos, rotate_sin);
-                (ray_direction_y, ray_direction_z) = rotate_2d(ray_direction_y, ray_direction_z, rotate_cos, rotate_sin);
-                */
-
                 let value = self.fcompute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
+                */
             }
         }
     }
