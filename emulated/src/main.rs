@@ -7,8 +7,7 @@ use std::time::Duration;
 const FB_W: usize = demos::FB_W;
 const FB_H: usize = demos::FB_H;
 
-struct ContextS<'a> {
-    lut: &'a mut [(u8, u8, u8)],
+struct ContextS {
     adds: usize,
     cmps: usize,
     shrs: usize,
@@ -19,11 +18,8 @@ struct ContextS<'a> {
     fmuls: usize,
 }
 
-impl<'a> demos::Context for ContextS<'a> {
+impl demos::Context for ContextS {
     fn wait_for_line(&mut self, _pixel_y: usize) {
-    }
-    fn set_lut(&mut self, i: u8, r: u8, g: u8, b: u8) {
-        self.lut[i as usize] = (r, g, b);
     }
     fn stats_count_adds(&mut self, n: usize) { self.adds += n; }
     fn stats_count_cmps(&mut self, n: usize) { self.cmps += n; }
@@ -47,8 +43,6 @@ pub fn main() {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let mut lut = [(0u8, 0u8, 0u8); 256];
-
     let mut state = demos::Julia::new();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -65,7 +59,6 @@ pub fn main() {
 
         {
             let mut context = ContextS {
-                lut: &mut lut,
                 adds: 0,
                 cmps: 0,
                 shrs: 0,
@@ -101,7 +94,14 @@ pub fn main() {
 
         for y in 0..FB_H {
             for x in 0..FB_W {
-                let (r, g, b) = lut[demos::fb()[y * FB_W + x] as usize];
+                let rgb565 = demos::fb()[y * FB_W + x] as usize;
+                let r = (rgb565 >> 11) & 0x1f;
+                let g = (rgb565 >> 5) & 0x3f;
+                let b = (rgb565 >> 0) & 0x1f;
+
+                let r = ((r << 3) | (r >> 2)) as u8;
+                let g = ((g << 2) | (g >> 4)) as u8;
+                let b = ((b << 3) | (b >> 2)) as u8;
                 canvas.set_draw_color(Color::RGB(r, g, b));
                 canvas.draw_point(Point::new(x as i32, y as i32)).unwrap();
             }
