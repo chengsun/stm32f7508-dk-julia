@@ -58,8 +58,6 @@ fn main() {
         "static LOOKUP_TABLE: [u32; 128*128*128] = [\n"
     ).unwrap();
 
-    let mut i = 0;
-
     for x in -64..64 {
         let x = (x as f64) / 64.;
         for y in -64..64 {
@@ -76,8 +74,6 @@ fn main() {
                     (((accum_color_g * 255.9999) as u32) << 8) |
                     (((accum_color_b * 255.9999) as u32) << 0)
                 ).unwrap();
-
-                i += 1;
             }
         }
     }
