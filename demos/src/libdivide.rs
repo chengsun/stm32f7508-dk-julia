@@ -68,7 +68,7 @@ pub fn gen(d: i32) -> Divider {
         // purposes!
         Divider {
             magic: i32::MAX,
-            more: (floor_log_2_d - 1) as u8,
+            more: (floor_log_2_d.wrapping_sub(1)) as u8,
         }
     } else {
         let magic = {
