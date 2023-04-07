@@ -116,9 +116,9 @@ impl Julia {
 
         for _ in 0..ITER_MAX {
             let index =
-                ((p_x >> 1) & 0x1FC000) +
-                ((p_y >> 8) & 0x003F80)+
-                ((p_z >> 15) & 0x00007F);
+                ((p_x & 0x3F8000) >> 1) +
+                ((p_y & 0x3F8000) >> 8) +
+                ((p_z & 0x3F8000) >> 15);
             let lookup_result = LOOKUP_TABLE[index as usize];
             let distance = (lookup_result & 0xFF) as u32;
             p_x += ray_direction_x * distance;
