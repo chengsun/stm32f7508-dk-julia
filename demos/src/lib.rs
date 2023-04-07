@@ -88,27 +88,39 @@ impl Julia {
         Self { rotate_frame: 0, translate_frame: 0 }
     }
 
-    fn compute_value(&self, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
+    fn compute_value(&self, context: &mut dyn Context, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
         const ITER_MAX: i32 = 16;
 
         let mut frag_color = 0u32;
 
+        context.stats_count_cmps(1);
         let ray_direction_x: u32 = ray_direction_x.abs() as u32;
+        context.stats_count_cmps(1);
         let ray_direction_y: u32 = ray_direction_y.abs() as u32;
         let mut ray_direction_z: u32 = ray_direction_z as u32;
 
         assert!(Q == 10);
 
+        context.stats_count_shrs(1);
         let mut p_x: u32 = ray_direction_x>>3;
+        context.stats_count_shrs(1);
         let mut p_y: u32 = ray_direction_y>>3;
+        context.stats_count_shrs(1);
+        context.stats_count_adds(1);
         let mut p_z: u32 = (ray_direction_z>>3) + translate_z as u32;
 
         // ray_direction: have 11 bits, require 7 bits
 
+        context.stats_count_shrs(1);
         let ray_direction_x = ray_direction_x << 1;
+        context.stats_count_shrs(3);
+        context.stats_count_adds(3);
         let ray_direction_zy = (ray_direction_z >> 4) << 16 | (ray_direction_y >> 4);
 
+        context.stats_count_shrs(1);
         p_x = p_x << 10;
+        context.stats_count_shrs(2);
+        context.stats_count_adds(2);
         let mut p_zy = p_z << 21 | p_y << 5;
 
         // 33222222222211111111110000000000
@@ -124,24 +136,40 @@ impl Julia {
         //                 0011111110000000
 
         for _ in 0..ITER_MAX {
+            context.stats_count_adds(4);
+            context.stats_count_shrs(2);
             let index =
                 ((p_x & 0x1FC000)) +
                 ((p_zy >> 2) & 0x3F80) +
                 ((p_zy >> 25));
+            context.stats_count_mems(1);
             let lookup_result = LOOKUP_TABLE[index as usize];
 
             // distance: have 6 bits, require 6 bits
+            context.stats_count_shrs(1);
             let distance = (lookup_result >> 24) as u32;
 
+            context.stats_count_adds(1);
+            context.stats_count_muls(1);
             p_x += ray_direction_x * distance;
+            context.stats_count_adds(1);
+            context.stats_count_muls(1);
             p_zy += ray_direction_zy * distance;
+            context.stats_count_adds(1);
             frag_color += lookup_result;
         }
 
+        context.stats_count_shrs(1);
+        context.stats_count_adds(1);
         let r = (frag_color >> 16) & 0xFF;
+        context.stats_count_shrs(1);
+        context.stats_count_adds(1);
         let g = (frag_color >> 8) & 0xFF;
+        context.stats_count_adds(1);
         let b = (frag_color >> 0) & 0xFF;
 
+        context.stats_count_adds(3);
+        context.stats_count_shrs(5);
         (((r >> 3) << 11) | ((g >> 2) << 5) | ((b >> 3) << 0)) as u16
     }
 }
@@ -175,7 +203,7 @@ impl Demo for Julia {
                 (ray_direction_x, ray_direction_z) = rotate_2d(ray_direction_x, ray_direction_z, rotate_cos, rotate_sin);
                 (ray_direction_y, ray_direction_z) = rotate_2d(ray_direction_y, ray_direction_z, rotate_cos, rotate_sin);
 
-                let value = self.compute_value(ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
+                let value = self.compute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
             }
         }
