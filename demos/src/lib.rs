@@ -110,7 +110,7 @@ impl Julia {
                  (-ray_direction_z) as u32)
             };
 
-        // ray_direction has 11 bits of precision here.
+        // ray_direction: have 11 bits, require 7 bits
 
         let ray_direction_x = ray_direction_x >> 4;
         let ray_direction_yz = (ray_direction_y >> 4) << 15 | (ray_direction_z >> 4);
@@ -125,10 +125,13 @@ impl Julia {
                 ((p_y & 0x03F800) >> 4) +
                 ((p_z) >> 11);
             let lookup_result = LOOKUP_TABLE[index as usize];
+
+            // distance: have 8 bits, require 6 bits
             let distance = (lookup_result & 0xFF) as u32;
-            let delta_yz = ray_direction_yz * distance;
-            let delta_y = (delta_yz >> 15) & 0x7FFF;
-            let delta_z = (delta_yz) & 0x7FFF;
+
+            let delta_yz = ray_direction_yz * (distance>>2);
+            let delta_y = (delta_yz >> 13) & 0x7FFF;
+            let delta_z = (delta_yz << 2) & 0x7FFF;
             p_x += (ray_direction_x << 3) * distance;
             p_y += delta_y;
             p_z += delta_z;
