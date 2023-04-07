@@ -120,11 +120,11 @@ impl Julia {
                 ((p_y >> 8) & 0x003F80)+
                 ((p_z >> 15) & 0x00007F);
             let lookup_result = LOOKUP_TABLE[index as usize];
-            let distance = (lookup_result >> 24) as u32;
+            let distance = (lookup_result & 0xFF) as u32;
             p_x += ray_direction_x * distance;
             p_y += ray_direction_y * distance;
             p_z += ray_direction_z * distance;
-            frag_color += lookup_result & 0xFFFFFF;
+            frag_color += lookup_result >> 8;
         }
 
         let r = (frag_color >> 16) & 0xFF;
