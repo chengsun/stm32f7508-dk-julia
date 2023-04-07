@@ -110,9 +110,9 @@ impl Julia {
                  (-ray_direction_z) as u32)
             };
 
-        let ray_direction_x = ray_direction_x >> 1;
-        let ray_direction_y = ray_direction_y >> 1;
-        let ray_direction_z = ray_direction_z >> 1;
+        let ray_direction_x = ray_direction_x >> 4;
+        let ray_direction_y = ray_direction_y >> 4;
+        let ray_direction_z = ray_direction_z >> 4;
 
         p_x = p_x << 10;
         p_y = p_y << 10;
@@ -125,9 +125,9 @@ impl Julia {
                 ((p_z) >> 14);
             let lookup_result = LOOKUP_TABLE[index as usize];
             let distance = (lookup_result & 0xFF) as u32;
-            p_x += ray_direction_x * distance;
-            p_y += ray_direction_y * distance;
-            p_z += ray_direction_z * distance;
+            p_x += (ray_direction_x << 3) * distance;
+            p_y += (ray_direction_y << 3) * distance;
+            p_z += (ray_direction_z << 3) * distance;
             frag_color += lookup_result >> 8;
         }
 
