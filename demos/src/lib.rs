@@ -113,31 +113,31 @@ impl Julia {
         // ray_direction: have 11 bits, require 7 bits
 
         let ray_direction_x = ray_direction_x << 1;
-        let ray_direction_yz = (ray_direction_y >> 4) << 16 | (ray_direction_z >> 4);
+        let ray_direction_zy = (ray_direction_z >> 4) << 16 | (ray_direction_y >> 4);
 
         p_x = p_x << 10;
-        let mut p_yz = p_y << 21 | p_z << 5;
+        let mut p_zy = p_z << 21 | p_y << 5;
 
         // 33222222222211111111110000000000
         // 10987654321098765432109876543210
         //               xxxxxxxx
-        //    yyyyyyyy        zzzzzzzz
+        //    zzzzzzzz        yyyyyyyy
         // ddddddddddd   __ddddddddddd
         //                   ddddddddddd
         //                 0011111110000000
 
         for _ in 0..ITER_MAX {
             let index =
-                ((p_x & 0x1FC000) >> 0) +
-                ((p_yz >> 18) & 0x3F80) +
-                ((p_yz >> 9) & 0x7F);
+                ((p_x & 0x1FC000)) +
+                ((p_zy >> 2) & 0x3F80) +
+                ((p_zy >> 25));
             let lookup_result = LOOKUP_TABLE[index as usize];
 
             // distance: have 6 bits, require 6 bits
             let distance = (lookup_result & 0xFF) as u32;
 
             p_x += ray_direction_x * distance;
-            p_yz += ray_direction_yz * distance;
+            p_zy += ray_direction_zy * distance;
             frag_color += lookup_result >> 8;
         }
 
