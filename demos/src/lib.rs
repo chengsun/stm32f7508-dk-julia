@@ -110,17 +110,17 @@ impl Julia {
                  (-ray_direction_z) as u32)
             };
 
-        p_x = p_x << 13;
-        p_y = p_y << 13;
-        p_z = p_z << 13;
+        p_x = p_x << 11;
+        p_y = p_y << 11;
+        p_z = p_z << 11;
 
         for _ in 0..ITER_MAX {
             let index =
-                ((p_x >> 3) & 0x1FC000) +
-                ((p_y >> 10) & 0x003F80)+
-                ((p_z >> 17) & 0x00007F);
+                ((p_x >> 1) & 0x1FC000) +
+                ((p_y >> 8) & 0x003F80)+
+                ((p_z >> 15) & 0x00007F);
             let lookup_result = LOOKUP_TABLE[index as usize];
-            let distance = (lookup_result >> 22) as u32;
+            let distance = (lookup_result >> 24) as u32;
             p_x += ray_direction_x * distance;
             p_y += ray_direction_y * distance;
             p_z += ray_direction_z * distance;
