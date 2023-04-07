@@ -121,9 +121,13 @@ impl Julia {
         // 33222222222211111111110000000000
         // 10987654321098765432109876543210
         //               xxxxxxxx
-        //    zzzzzzzz        yyyyyyyy
-        // ddddddddddd   __ddddddddddd
-        //                   ddddddddddd
+        //         zzzzzzzz        yyyyyyyy
+        //   dddddddddddddd  dddddddddddddd
+        //                 YYYYYYYyyyyyyyyy
+        // ZZZZZZZzzzzzzzzz
+        //            xxxxxxx
+        //                   yyyyyyy
+        //                          zzzzzzz
         //                 0011111110000000
 
         for _ in 0..ITER_MAX {
@@ -134,11 +138,11 @@ impl Julia {
             let lookup_result = LOOKUP_TABLE[index as usize];
 
             // distance: have 6 bits, require 6 bits
-            let distance = (lookup_result & 0xFF) as u32;
+            let distance = (lookup_result >> 24) as u32;
 
             p_x += ray_direction_x * distance;
             p_zy += ray_direction_zy * distance;
-            frag_color += lookup_result >> 8;
+            frag_color += lookup_result;
         }
 
         let r = (frag_color >> 16) & 0xFF;

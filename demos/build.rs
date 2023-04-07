@@ -69,10 +69,10 @@ fn main() {
 
                 write!(file,
                        "  0x{:08x},\n",
-                    (((accum * 63.9999) as u32) << 0) |
-                    (((accum_color_r * 255.9999) as u32) << 24) |
-                    (((accum_color_g * 255.9999) as u32) << 16) |
-                    (((accum_color_b * 255.9999) as u32) << 8)
+                    (((accum * 63.9999) as u32) << 24) |
+                    (((accum_color_r * 255.9999) as u32) << 16) |
+                    (((accum_color_g * 255.9999) as u32) << 8) |
+                    (((accum_color_b * 255.9999) as u32) << 0)
                 ).unwrap();
             }
         }
