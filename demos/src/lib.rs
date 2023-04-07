@@ -96,6 +96,8 @@ impl Julia {
         let ray_direction_x: u32 = ray_direction_x.abs() as u32;
         let ray_direction_y: u32 = ray_direction_y.abs() as u32;
 
+        assert!(Q == 10);
+
         let mut p_x: u32 = ray_direction_x>>3;
         let mut p_y: u32 = ray_direction_y>>3;
         let (mut p_z, ray_direction_z): (u32, u32) =
@@ -103,25 +105,25 @@ impl Julia {
                 (((ray_direction_z>>3) + translate_z) as u32,
                  ray_direction_z as u32)
             } else {
-                // TODO: where did this 20 offset come from
-                (((-(ray_direction_z>>3) - translate_z + 20) & ((2 << Q) - 1)) as u32,
+                // TODO: where did this 16 offset come from
+                (((-(ray_direction_z>>3) - translate_z + 16) & ((2 << Q) - 1)) as u32,
                  (-ray_direction_z) as u32)
             };
 
-        p_x = p_x << (2*7);
-        p_y = p_y << (1*7);
-        p_z = p_z << (0*7);
+        p_x = p_x << 13;
+        p_y = p_y << 13;
+        p_z = p_z << 13;
 
         for _ in 0..ITER_MAX {
             let index =
-                ((p_x >> (Q+1-7)) & 0x1FC000) +
-                ((p_y >> (Q+1-7)) & 0x003F80)+
-                ((p_z >> (Q+1-7)) & 0x00007F);
+                ((p_x >> 3) & 0x1FC000) +
+                ((p_y >> 10) & 0x003F80)+
+                ((p_z >> 17) & 0x00007F);
             let lookup_result = LOOKUP_TABLE[index as usize];
-            let distance = ((lookup_result >> 24) as u32) << (Q-8);
-            p_x += shift(ray_direction_x * distance, 2*7 - 3 - Q);
-            p_y += shift(ray_direction_y * distance, 1*7 - 3 - Q);
-            p_z += shift(ray_direction_z * distance, 0*7 - 3 - Q);
+            let distance = (lookup_result >> 22) as u32;
+            p_x += ray_direction_x * distance;
+            p_y += ray_direction_y * distance;
+            p_z += ray_direction_z * distance;
             frag_color += lookup_result & 0xFFFFFF;
         }
 
