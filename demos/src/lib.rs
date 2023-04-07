@@ -112,7 +112,7 @@ impl Julia {
 
         // ray_direction: have 11 bits, require 7 bits
 
-        let ray_direction_x = ray_direction_x >> 4;
+        let ray_direction_x = ray_direction_x >> 1;
         let ray_direction_yz = (ray_direction_y >> 4) << 16 | (ray_direction_z >> 4);
 
         p_x = p_x << 10;
@@ -128,9 +128,8 @@ impl Julia {
             // distance: have 8 bits, require 6 bits
             let distance = (lookup_result & 0xFF) as u32;
 
-            let delta_yz = ray_direction_yz * (distance>>2);
-            p_x += (ray_direction_x << 3) * distance;
-            p_yz += delta_yz & 0x1FFF1FFF;
+            p_x += ray_direction_x * distance;
+            p_yz += ray_direction_yz * (distance>>2);
             frag_color += lookup_result >> 8;
         }
 
