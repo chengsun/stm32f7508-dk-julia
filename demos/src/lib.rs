@@ -75,11 +75,6 @@ pub struct Julia {
     translate_frame: u32,
 }
 
-#[inline(always)]
-fn shift(x: u32, n: i32) -> u32 {
-    if n == 0 { x } else if n < 0 { x >> (-n) } else { x << n }
-}
-
 impl Julia {
     pub fn new() -> Self {
         for x in 0..(FB_W * FB_H) {
@@ -97,17 +92,17 @@ impl Julia {
         let ray_direction_x: u32 = ray_direction_x.abs() as u32;
         context.stats_count_cmps(1);
         let ray_direction_y: u32 = ray_direction_y.abs() as u32;
-        let mut ray_direction_z: u32 = ray_direction_z as u32;
+        let ray_direction_z: u32 = ray_direction_z as u32;
 
         assert!(Q == 10);
 
         context.stats_count_shrs(1);
         let mut p_x: u32 = ray_direction_x>>3;
         context.stats_count_shrs(1);
-        let mut p_y: u32 = ray_direction_y>>3;
+        let p_y: u32 = ray_direction_y>>3;
         context.stats_count_shrs(1);
         context.stats_count_adds(1);
-        let mut p_z: u32 = (ray_direction_z>>3) + translate_z as u32;
+        let p_z: u32 = (ray_direction_z>>3) + translate_z as u32;
 
         // ray_direction: have 11 bits, require 7 bits
 
@@ -175,7 +170,7 @@ impl Julia {
 }
 
 impl Demo for Julia {
-    fn pre_render(&mut self, context: &mut dyn Context) {
+    fn pre_render(&mut self, _context: &mut dyn Context) {
     }
 
     #[inline(always)]
