@@ -95,20 +95,13 @@ impl Julia {
 
         let ray_direction_x: u32 = ray_direction_x.abs() as u32;
         let ray_direction_y: u32 = ray_direction_y.abs() as u32;
+        let mut ray_direction_z: u32 = ray_direction_z as u32;
 
         assert!(Q == 10);
 
         let mut p_x: u32 = ray_direction_x>>3;
         let mut p_y: u32 = ray_direction_y>>3;
-        let (mut p_z, ray_direction_z): (u32, u32) =
-            if ray_direction_z >= 0 {
-                (((ray_direction_z>>3) + translate_z) as u32,
-                 ray_direction_z as u32)
-            } else {
-                // TODO: where did this 16 offset come from
-                (((-(ray_direction_z>>3) - translate_z + 16) & ((2 << Q) - 1)) as u32,
-                 (-ray_direction_z) as u32)
-            };
+        let mut p_z: u32 = (ray_direction_z>>3) + translate_z as u32;
 
         // ray_direction: have 11 bits, require 7 bits
 
