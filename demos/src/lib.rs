@@ -136,8 +136,9 @@ impl Julia {
         //                 0011111110000000
 
         for iters_left in (1..=ITER_MAX).rev() {
+            // can shave one shift off using BFI
             context.stats_count_adds(4);
-            context.stats_count_shrs(2);
+            context.stats_count_shrs(1);
             let index =
                 ((p_x & 0x1FC000)) +
                 ((p_zy >> 2) & 0x3F80) +
