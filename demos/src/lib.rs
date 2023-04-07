@@ -110,24 +110,28 @@ impl Julia {
                  (-ray_direction_z) as u32)
             };
 
+        // ray_direction has 11 bits of precision here.
+
         let ray_direction_x = ray_direction_x >> 4;
-        let ray_direction_y = ray_direction_y >> 4;
-        let ray_direction_z = ray_direction_z >> 4;
+        let ray_direction_yz = (ray_direction_y >> 4) << 15 | (ray_direction_z >> 4);
 
         p_x = p_x << 10;
-        p_y = p_y << 10;
-        p_z = p_z << 10;
+        p_y = p_y << 7;
+        p_z = p_z << 7;
 
         for _ in 0..ITER_MAX {
             let index =
                 ((p_x & 0x1FC000) >> 0) +
-                ((p_y & 0x1FC000) >> 7) +
-                ((p_z) >> 14);
+                ((p_y & 0x03F800) >> 4) +
+                ((p_z) >> 11);
             let lookup_result = LOOKUP_TABLE[index as usize];
             let distance = (lookup_result & 0xFF) as u32;
+            let delta_yz = ray_direction_yz * distance;
+            let delta_y = (delta_yz >> 15) & 0x7FFF;
+            let delta_z = (delta_yz) & 0x7FFF;
             p_x += (ray_direction_x << 3) * distance;
-            p_y += (ray_direction_y << 3) * distance;
-            p_z += (ray_direction_z << 3) * distance;
+            p_y += delta_y;
+            p_z += delta_z;
             frag_color += lookup_result >> 8;
         }
 
