@@ -77,7 +77,7 @@ pub fn main() {
                      1*context.cmps +
                      1*context.shrs +
                      1*context.muls +
-                     2*context.mems +
+                     5*context.mems +
                      10*context.divs +
                      1*context.fcvts +
                      3*context.fmuls) / scale,
@@ -86,7 +86,7 @@ pub fn main() {
                      (1*context.cmps)/scale,
                      (1*context.shrs)/scale,
                      (1*context.muls)/scale,
-                     (2*context.mems)/scale,
+                     (5*context.mems)/scale,
                      (10*context.divs)/scale,
                      (1*context.fcvts)/scale,
                      (3*context.fmuls)/scale);
