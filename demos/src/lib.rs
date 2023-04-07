@@ -84,21 +84,22 @@ impl Julia {
     }
 
     fn compute_value(&self, ray_direction_x: i32, ray_direction_y: i32, ray_direction_z: i32, translate_z: i32) -> u16 {
-        const ITER_MAX: i32 = 17;
+        const ITER_MAX: i32 = 16;
 
         let mut frag_color = 0u32;
 
         let ray_direction_x: u32 = ray_direction_x.abs() as u32;
         let ray_direction_y: u32 = ray_direction_y.abs() as u32;
 
-        let mut p_x: u32 = 0;
-        let mut p_y: u32 = 0;
+        let mut p_x: u32 = ray_direction_x>>3;
+        let mut p_y: u32 = ray_direction_y>>3;
         let (mut p_z, ray_direction_z): (u32, u32) =
             if ray_direction_z >= 0 {
-                (translate_z as u32, ray_direction_z as u32)
+                (((ray_direction_z>>3) + translate_z) as u32,
+                 ray_direction_z as u32)
             } else {
                 // TODO: where did this 20 offset come from
-                ((( - translate_z + 20) & ((2 << Q) - 1)) as u32,
+                (((-(ray_direction_z>>3) - translate_z + 20) & ((2 << Q) - 1)) as u32,
                  (-ray_direction_z) as u32)
             };
 
