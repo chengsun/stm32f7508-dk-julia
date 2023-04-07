@@ -135,7 +135,7 @@ impl Julia {
         //                          zzzzzzz
         //                 0011111110000000
 
-        for _ in 0..ITER_MAX {
+        for iters_left in (1..=ITER_MAX).rev() {
             context.stats_count_adds(4);
             context.stats_count_shrs(2);
             let index =
@@ -148,6 +148,13 @@ impl Julia {
             // distance: have 6 bits, require 6 bits
             context.stats_count_shrs(1);
             let distance = (lookup_result >> 24) as u32;
+            context.stats_count_cmps(1);
+            if distance == 0 {
+                context.stats_count_adds(1);
+                context.stats_count_muls(1);
+                frag_color += lookup_result * iters_left as u32;
+                break;
+            }
 
             context.stats_count_adds(1);
             context.stats_count_muls(1);
