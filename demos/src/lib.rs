@@ -122,7 +122,7 @@ impl Julia {
             let index =
                 ((p_x & 0x1FC000) >> 0) +
                 ((p_y & 0x1FC000) >> 7) +
-                ((p_z & 0x1FC000) >> 14);
+                ((p_z) >> 14);
             let lookup_result = LOOKUP_TABLE[index as usize];
             let distance = (lookup_result & 0xFF) as u32;
             p_x += ray_direction_x * distance;
