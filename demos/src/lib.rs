@@ -118,6 +118,14 @@ impl Julia {
         p_x = p_x << 10;
         let mut p_yz = p_y << 21 | p_z << 5;
 
+        // 33222222222211111111110000000000
+        // 10987654321098765432109876543210
+        //               xxxxxxxx
+        //    yyyyyyyy        zzzzzzzz
+        // ddddddddddd   __ddddddddddd
+        //                   ddddddddddd
+        //                 0011111110000000
+
         for _ in 0..ITER_MAX {
             let index =
                 ((p_x & 0x1FC000) >> 0) +
