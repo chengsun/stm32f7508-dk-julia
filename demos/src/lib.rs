@@ -75,6 +75,11 @@ pub struct Julia {
     translate_frame: u32,
 }
 
+#[inline(always)]
+fn shift(x: u32, n: i32) -> u32 {
+    if n == 0 { x } else if n < 0 { x >> (-n) } else { x << n }
+}
+
 impl Julia {
     pub fn new() -> Self {
         for x in 0..(FB_W * FB_H) {
@@ -103,16 +108,20 @@ impl Julia {
                  (-ray_direction_z) as u32)
             };
 
+        p_x = p_x << (2*7);
+        p_y = p_y << (1*7);
+        p_z = p_z << (0*7);
+
         for _ in 0..ITER_MAX {
-            let index = (p_x >> (Q+1-7)) * 128 * 128 + (p_y >> (Q+1-7)) * 128 + (p_z >> (Q+1-7));
+            let index =
+                ((p_x >> (Q+1-7)) & 0x1FC000) +
+                ((p_y >> (Q+1-7)) & 0x003F80)+
+                ((p_z >> (Q+1-7)) & 0x00007F);
             let lookup_result = LOOKUP_TABLE[index as usize];
             let distance = ((lookup_result >> 24) as u32) << (Q-8);
-            p_x += (ray_direction_x * distance) >> (Q+3);
-            p_y += (ray_direction_y * distance) >> (Q+3);
-            p_z += (ray_direction_z * distance) >> (Q+3);
-            p_x = p_x & ((2<<Q) - 1);
-            p_y = p_y & ((2<<Q) - 1);
-            p_z = p_z & ((2<<Q) - 1);
+            p_x += shift(ray_direction_x * distance, 2*7 - 3 - Q);
+            p_y += shift(ray_direction_y * distance, 1*7 - 3 - Q);
+            p_z += shift(ray_direction_z * distance, 0*7 - 3 - Q);
             frag_color += lookup_result & 0xFFFFFF;
         }
 
