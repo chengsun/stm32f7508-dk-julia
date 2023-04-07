@@ -167,7 +167,8 @@ impl Julia {
             frag_color += lookup_result;
         }
 
-        context.stats_count_adds(5);
+        // can use bfi here as well to save cycles
+        context.stats_count_adds(3);
         context.stats_count_shrs(3);
         (((frag_color & 0xF80000) >> 8) | ((frag_color & 0xFC00) >> 5) | ((frag_color & 0xF8) >> 3)) as u16
     }
