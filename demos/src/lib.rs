@@ -116,22 +116,22 @@ impl Julia {
         let ray_direction_yz = (ray_direction_y >> 4) << 15 | (ray_direction_z >> 4);
 
         p_x = p_x << 10;
-        p_y = p_y << 7;
-        p_z = p_z << 7;
+        p_y = p_y << 5;
+        p_z = p_z << 5;
 
         for _ in 0..ITER_MAX {
             let index =
                 ((p_x & 0x1FC000) >> 0) +
-                ((p_y & 0x03F800) >> 4) +
-                ((p_z) >> 11);
+                ((p_y & 0x00FE00) >> 2) +
+                ((p_z) >> 9);
             let lookup_result = LOOKUP_TABLE[index as usize];
 
             // distance: have 8 bits, require 6 bits
             let distance = (lookup_result & 0xFF) as u32;
 
             let delta_yz = ray_direction_yz * (distance>>2);
-            let delta_y = (delta_yz >> 13) & 0x7FFF;
-            let delta_z = (delta_yz << 2) & 0x7FFF;
+            let delta_y = (delta_yz >> 15) & 0x1FFF;
+            let delta_z = (delta_yz) & 0x1FFF;
             p_x += (ray_direction_x << 3) * distance;
             p_y += delta_y;
             p_z += delta_z;
