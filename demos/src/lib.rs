@@ -195,7 +195,8 @@ impl Demo for Julia {
 
         for pixel_y in 0..FB_H {
             context.wait_for_line(pixel_y);
-            for pixel_x in 0..FB_W {
+            let mut pixel_x = (self.rotate_frame as usize + pixel_y as usize) & 1;
+            while pixel_x < FB_W {
                 let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << Q) / (FB_H as i32);
                 let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << Q) / (FB_H as i32);
                 let mut ray_direction_z = 1 << Q;
@@ -205,6 +206,8 @@ impl Demo for Julia {
 
                 let value = self.compute_value(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
+
+                pixel_x += 2;
             }
         }
     }
