@@ -121,8 +121,8 @@ impl Julia {
         for _ in 0..ITER_MAX {
             let index =
                 ((p_x & 0x1FC000) >> 0) +
-                (((p_yz & 0xFE000000) >> 18)) +
-                (((p_yz) >> 9) & 0x7F);
+                ((p_yz >> 18) & 0x3F80) +
+                ((p_yz >> 9) & 0x7F);
             let lookup_result = LOOKUP_TABLE[index as usize];
 
             // distance: have 6 bits, require 6 bits
