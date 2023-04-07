@@ -89,6 +89,9 @@ impl Julia {
         let mut ray_len = 0u32;
         let mut frag_color = 0u32;
 
+        let ray_direction_x = ray_direction_x.abs();
+        let ray_direction_y = ray_direction_y.abs();
+
         for _ in 0..ITER_MAX {
             let mut p_x = (ray_direction_x * ray_len as i32) >> Q;
             let mut p_y = (ray_direction_y * ray_len as i32) >> Q;
