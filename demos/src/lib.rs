@@ -159,18 +159,9 @@ impl Julia {
             frag_color += lookup_result;
         }
 
-        context.stats_count_shrs(1);
-        context.stats_count_adds(1);
-        let r = (frag_color >> 16) & 0xFF;
-        context.stats_count_shrs(1);
-        context.stats_count_adds(1);
-        let g = (frag_color >> 8) & 0xFF;
-        context.stats_count_adds(1);
-        let b = (frag_color >> 0) & 0xFF;
-
-        context.stats_count_adds(3);
-        context.stats_count_shrs(5);
-        (((r >> 3) << 11) | ((g >> 2) << 5) | ((b >> 3) << 0)) as u16
+        context.stats_count_adds(5);
+        context.stats_count_shrs(3);
+        (((frag_color & 0xF80000) >> 8) | ((frag_color & 0xFC00) >> 5) | ((frag_color & 0xF8) >> 3)) as u16
     }
 }
 
