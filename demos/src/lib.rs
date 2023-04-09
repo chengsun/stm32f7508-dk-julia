@@ -168,6 +168,15 @@ impl Julia {
             let mut min_distance_q13 = i32::MAX;
             let mut accum_q13 = 1i32 << 13;
 
+            /*
+             * x, y, z       [-1, 1)      1 / 31
+             * sqr_distance  [0, 3]       2 / 30
+             * this_distance [0, 1.74)    1 / 31
+             * this_accum    [0, 1.5]     1 / 31
+             * min_distance  [0, 1.74)    1 / 31
+             * accum         [0, 5.08)    3 / 29
+            */
+
             for _ in 0..20 {
                 x_q13 = (x_q13 & ((1<<(13+1)) - 1)) - (1<<13);
                 y_q13 = (y_q13 & ((1<<(13+1)) - 1)) - (1<<13);
@@ -183,6 +192,10 @@ impl Julia {
                 min_distance_q13 = min_distance_q13.min(this_distance_q13);
 
                 accum_q13 = (accum_q13 * this_accum_q17) >> 17;
+                if accum_q13 > (5.073973095 * FQ13) as i32 {
+                    // ln(0.227×2.75×256)
+                    break;
+                }
                 if this_accum_q17 > 0 {
                     x_q13 = (x_q13 << 17) / this_accum_q17 - (1 << 13);
                     y_q13 = (y_q13 << 17) / this_accum_q17 - (1 << 13);
@@ -204,7 +217,7 @@ impl Julia {
             let accum_color_g = (0.0227*FQ13) as i32 * base_color_g / exp_accum;
             let accum_color_b = (0.0227*FQ13) as i32 * base_color_b / exp_accum;
 
-            accum_q13 = accum_q13.min(1<<13);
+            accum_q13 = accum_q13.min(1<<13 - 1);
 
             return (accum_color_r, accum_color_g, accum_color_b, accum_q13);
         }
