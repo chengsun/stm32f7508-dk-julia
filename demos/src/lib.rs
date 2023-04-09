@@ -219,6 +219,10 @@ impl Julia {
             return (accum_color_r, accum_color_g, accum_color_b, accum_q13);
         }
 
+        for x in lookup_table().iter_mut() {
+            *x = 0;
+        }
+
         for x in 0..128 {
             let x_q = x << (13-6);
             for y in 0..128 {
