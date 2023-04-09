@@ -174,7 +174,7 @@ impl Julia {
              * this_distance [0, 1.74)    1 / 31
              * this_accum    [0, 1.5]     1 / 31
              * min_distance  [0, 1.74)    1 / 31
-             * accum         [0, 5.08)    3 / 29
+             * accum         [0, 1.5)     1 / 29
             */
 
             for _ in 0..20 {
@@ -192,10 +192,7 @@ impl Julia {
                 min_distance_q13 = min_distance_q13.min(this_distance_q13);
 
                 accum_q13 = (accum_q13 * this_accum_q17) >> 17;
-                if accum_q13 > (5.073973095 * FQ13) as i32 {
-                    // ln(0.227×2.75×256)
-                    break;
-                }
+                assert!(accum_q13 < (1.5 * FQ13) as i32);
                 if this_accum_q17 > 0 {
                     x_q13 = (x_q13 << 17) / this_accum_q17 - (1 << 13);
                     y_q13 = (y_q13 << 17) / this_accum_q17 - (1 << 13);
@@ -306,18 +303,18 @@ impl Julia {
             if distance == 0 {
                 context.stats_count_adds(1);
                 context.stats_count_muls(1);
-                frag_color += lookup_result * iters_left as u32;
+                frag_color = frag_color.wrapping_add(lookup_result.wrapping_mul(iters_left as u32));
                 break;
             }
 
             context.stats_count_adds(1);
             context.stats_count_muls(1);
-            p_x += ray_direction_x * distance;
+            p_x = p_x.wrapping_add(ray_direction_x.wrapping_mul(distance));
             context.stats_count_adds(1);
             context.stats_count_muls(1);
-            p_zy += ray_direction_zy * distance;
+            p_zy = p_zy.wrapping_add(ray_direction_zy.wrapping_mul(distance));
             context.stats_count_adds(1);
-            frag_color += lookup_result;
+            frag_color = frag_color.wrapping_add(lookup_result);
         }
 
         // can use bfi here as well to save cycles
