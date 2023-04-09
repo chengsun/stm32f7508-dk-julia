@@ -42,35 +42,8 @@ pub trait Demo {
 pub const FB_W: usize = 480;
 pub const FB_H: usize = 272;
 
-const Q: i32 = 12;
 const ROTATE_FRAME_MAX: u32 = 942;
 const TRANSLATE_FRAME_MAX: u32 = 188;
-
-fn sin_internal(offset: i32) -> i32 {
-    assert!(offset >= 0 && offset <= (1<<Q));
-    match Q {
-        8 => offset * ((3<<16) - offset*offset) >> 17,
-        9 => offset * ((3<<18) - offset*offset) >> 19,
-        10 => (offset>>1) * ((3<<18) - (offset>>1)*(offset>>1)) >> 18,
-        11 => (offset>>2) * ((3<<18) - (offset>>2)*(offset>>2)) >> 17,
-        12 => (offset>>3) * ((3<<18) - (offset>>3)*(offset>>3)) >> 16,
-        13 => (offset>>4) * ((3<<18) - (offset>>4)*(offset>>4)) >> 15,
-        _ => unreachable!()
-    }
-}
-
-fn cos_sin(theta: i32) -> (i32, i32) {
-    assert!(theta >= 0 && theta <= (4<<Q));
-    if theta <= 1<<Q {
-        (sin_internal((1<<Q) - theta), sin_internal(theta))
-    } else if theta <= 2<<Q {
-        (-sin_internal(theta - (1<<Q)), sin_internal((2<<Q) - theta))
-    } else if theta <= 3<<Q {
-        (-sin_internal((3<<Q) - theta), -sin_internal(theta - (2<<Q)))
-    } else {
-        (sin_internal(theta - (3<<Q)), -sin_internal((4<<Q) - theta))
-    }
-}
 
 fn sin_internal_q10(offset: i32) -> i32 {
     (offset>>1) * ((3<<18) - (offset>>1)*(offset>>1)) >> 18
@@ -86,6 +59,23 @@ fn cos_sin_q10(theta: i32) -> (i32, i32) {
         (-sin_internal_q10((3<<10) - theta), -sin_internal_q10(theta - (2<<10)))
     } else {
         (sin_internal_q10(theta - (3<<10)), -sin_internal_q10((4<<10) - theta))
+    }
+}
+
+fn sin_internal_q13(offset: i32) -> i32 {
+    (offset>>4) * ((3<<18) - (offset>>4)*(offset>>4)) >> 15
+}
+
+fn cos_sin_q13(theta: i32) -> (i32, i32) {
+    assert!(theta >= 0 && theta <= (4<<13));
+    if theta <= 1<<13 {
+        (sin_internal_q13((1<<13) - theta), sin_internal_q13(theta))
+    } else if theta <= 2<<13 {
+        (-sin_internal_q13(theta - (1<<13)), sin_internal_q13((2<<13) - theta))
+    } else if theta <= 3<<13 {
+        (-sin_internal_q13((3<<13) - theta), -sin_internal_q13(theta - (2<<13)))
+    } else {
+        (sin_internal_q13(theta - (3<<13)), -sin_internal_q13((4<<13) - theta))
     }
 }
 
@@ -105,13 +95,13 @@ fn isqrt(n: i32) -> i32 {
     }
 }
 
-const FQ: f64 = (1<<Q) as f64;
+const FQ13: f64 = (1<<13) as f64;
 
 // https://www.quinapalus.com/efunc.html
-fn qexp(mut x: i32) -> i32 {
+fn qexp_q13(mut x: i32) -> i32 {
     assert!(x >= 0);
 
-    let mut y = 1 << Q;
+    let mut y = 1 << 13;
     let mut t;
 
     fn saturating_shl(n: i32, s: i32) -> i32 {
@@ -122,41 +112,41 @@ fn qexp(mut x: i32) -> i32 {
         }
     }
 
-    t = x - (11.09035489*FQ) as i32;
+    t = x - (11.09035489*FQ13) as i32;
     if t*2 >= x { return i32::MAX; }
     if t > 0 { x = t; y = saturating_shl(y, 16); }
 
-    t = x - (5.545177444*FQ) as i32;
+    t = x - (5.545177444*FQ13) as i32;
     if t > 0 { x = t; y = saturating_shl(y, 8); }
 
-    t = x - (2.772588722*FQ) as i32;
+    t = x - (2.772588722*FQ13) as i32;
     if t > 0 { x = t; y = saturating_shl(y, 4); }
 
-    t = x - (1.386294361*FQ) as i32;
+    t = x - (1.386294361*FQ13) as i32;
     if t > 0 { x = t; y = saturating_shl(y, 2); }
 
-    t = x - (0.6931471806*FQ) as i32;
+    t = x - (0.6931471806*FQ13) as i32;
     if t > 0 { x = t; y = saturating_shl(y, 1); }
 
-    t = x - (0.4054651081*FQ) as i32;
+    t = x - (0.4054651081*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>1); }
 
-    t = x - (0.2231435513*FQ) as i32;
+    t = x - (0.2231435513*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>2); }
 
-    t = x - (0.1177830357*FQ) as i32;
+    t = x - (0.1177830357*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>3); }
 
-    t = x - (0.06062462182*FQ) as i32;
+    t = x - (0.06062462182*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>4); }
 
-    t = x - (0.03077165867*FQ) as i32;
+    t = x - (0.03077165867*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>5); }
 
-    t = x - (0.01550418654*FQ) as i32;
+    t = x - (0.01550418654*FQ13) as i32;
     if t > 0 { x = t; y = y.saturating_add(y>>6); }
 
-    y.saturating_add((y >> Q).saturating_mul(x))
+    y.saturating_add((y >> 13).saturating_mul(x))
 }
 
 fn rotate_2d_q10(x: i32, y: i32, cos: i32, sin: i32) -> (i32, i32) {
@@ -174,121 +164,65 @@ impl Julia {
             fb()[x] = 0;
         }
 
-        fn lookup(mut x: i32, mut y: i32, mut z: i32) -> (i32, i32, i32, i32) {
+        fn lookup_q13(mut x: i32, mut y: i32, mut z: i32) -> (i32, i32, i32, i32) {
             let mut min_distance = i32::MAX;
-            let mut accum = 1i32 << Q;
+            let mut accum = 1i32 << 13;
 
             for iter in 0..20 {
-                x = (x & ((1<<(Q+1)) - 1)) - (1<<Q);
-                y = (y & ((1<<(Q+1)) - 1)) - (1<<Q);
-                z = (z & ((1<<(Q+1)) - 1)) - (1<<Q);
+                x = (x & ((1<<(13+1)) - 1)) - (1<<13);
+                y = (y & ((1<<(13+1)) - 1)) - (1<<13);
+                z = (z & ((1<<(13+1)) - 1)) - (1<<13);
 
-                const Q2: i32 = 15;
-                const Q2_SQRT_2: i32 = (1.414213562 * (1 << Q2) as f64) as i32;
-                (y, z) = ((Q2_SQRT_2 * (y + z)) >> (Q2+1), (Q2_SQRT_2 * (z - y)) >> (Q2+1));
+                const Q2_SQRT_2: i32 = (1.414213562 * FQ13) as i32;
+                (y, z) = ((Q2_SQRT_2 * (y + z)) >> (13+1), (Q2_SQRT_2 * (z - y)) >> (13+1));
 
-                let sqr_distance = (x*x + y*y + z*z) >> Q;
-                assert!(Q % 2 == 0);
-                let this_distance = isqrt(sqr_distance) << (Q/2);
-                let this_accum = sqr_distance >> 1;
+                let sqr_distance = (x*x + y*y + z*z);
+                let this_distance = isqrt(sqr_distance);
+                let this_accum = sqr_distance >> (13+1);
 
                 min_distance = min_distance.min(this_distance);
 
-                accum = (accum * this_accum) >> Q;
+                accum = (accum * this_accum) >> 13;
                 let this_accum = this_accum.max(1);
-                x = (x << Q) / this_accum - (1 << Q);
-                y = (y << Q) / this_accum - (1 << Q);
-                z = (z << Q) / this_accum - (1 << Q);
+                x = (x << 13) / this_accum - (1 << 13);
+                y = (y << 13) / this_accum - (1 << 13);
+                z = (z << 13) / this_accum - (1 << 13);
             }
 
-            fn qsin(theta: i32) -> i32 {
-                let theta = theta & ((1<<(Q+2))-1);
-                cos_sin(theta).1
+            fn qsin_q13(theta: i32) -> i32 {
+                let theta = theta & ((1<<(13+2))-1);
+                cos_sin_q13(theta).1
             }
 
-            let base_color_r = (1.75*FQ) as i32 + qsin(((3.*0.57*FQ) as i32 * min_distance as i32) >> Q);
-            let base_color_g = (1.75*FQ) as i32 + qsin(((4.*0.57*FQ) as i32 * min_distance as i32) >> Q);
-            let base_color_b = (1.75*FQ) as i32 + qsin(((6.*0.57*FQ) as i32 * min_distance as i32) >> Q);
+            let base_color_r = (1.75*FQ13) as i32 + qsin_q13(((3.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
+            let base_color_g = (1.75*FQ13) as i32 + qsin_q13(((4.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
+            let base_color_b = (1.75*FQ13) as i32 + qsin_q13(((6.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
 
-            let exp_accum = qexp(accum as i32 * 32);
-            let accum_color_r = (0.0227*FQ) as i32 * base_color_r / exp_accum;
-            let accum_color_g = (0.0227*FQ) as i32 * base_color_g / exp_accum;
-            let accum_color_b = (0.0227*FQ) as i32 * base_color_b / exp_accum;
+            let exp_accum = qexp_q13(accum as i32 * 32);
+            let accum_color_r = (0.0227*FQ13) as i32 * base_color_r / exp_accum;
+            let accum_color_g = (0.0227*FQ13) as i32 * base_color_g / exp_accum;
+            let accum_color_b = (0.0227*FQ13) as i32 * base_color_b / exp_accum;
 
-            accum = accum.min(1<<Q);
-
-            return (accum_color_r, accum_color_g, accum_color_b, accum);
-        }
-
-        fn flookup(mut x: f64, mut y: f64, mut z: f64) -> (f64, f64, f64, f64) {
-            fn rotate_2d(p: (f64, f64), angle: f64) -> (f64, f64) {
-                let (sin, cos) = angle.sin_cos();
-                (cos * p.0 + sin * p.1, cos * p.1 - sin * p.0)
-            }
-
-            fn floor_mod(x: f64, y: f64) -> f64 {
-                x - y * (x / y).floor()
-            }
-
-            let mut min_distance : f64 = 100.;
-            let mut accum = 1.;
-
-            for iter in 0..20 {
-                x = floor_mod(x, 2.) - 1.;
-                y = floor_mod(y, 2.) - 1.;
-                z = floor_mod(z, 2.) - 1.;
-
-                (y, z) = rotate_2d((y, z), core::f64::consts::PI / 4.);
-
-                let sqr_distance = x*x + y*y + z*z;
-                let this_distance = sqr_distance.sqrt();
-                let this_accum = sqr_distance / 2.;
-
-                min_distance = min_distance.min(this_distance);
-
-                accum *= this_accum;
-                x = x / this_accum - 1.;
-                y = y / this_accum - 1.;
-                z = z / this_accum - 1.;
-            }
-
-            let base_color_r = 1.75 + (3. * min_distance * 0.9).sin();
-            let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
-            let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
-
-            let accum_color_r = 0.0227 * base_color_r / (accum * 32.).exp();
-            let accum_color_g = 0.0227 * base_color_g / (accum * 32.).exp();
-            let accum_color_b = 0.0227 * base_color_b / (accum * 32.).exp();
-
-            accum = accum.min(1.);
+            accum = accum.min(1<<13);
 
             return (accum_color_r, accum_color_g, accum_color_b, accum);
         }
 
         let mut flag = false;
         for x in 0..128 {
-            let x_q = x << (Q-6);
-            let fx = (x as f64) / 64.;
+            let x_q = x << (13-6);
             for y in 0..128 {
-                let y_q = y << (Q-6);
-                let fy = (y as f64) / 64.;
+                let y_q = y << (13-6);
                 for z in 0..128 {
-                    let z_q = z << (Q-6);
-                    let fz = (z as f64) / 64.;
+                    let z_q = z << (13-6);
 
-                    let (faccum_color_r, faccum_color_g, faccum_color_b, faccum) = flookup(fx, fy, fz);
-                    let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup(x_q, y_q, z_q);
-
-                    if !flag && faccum_color_b > 0.1 {
-                        println!("{} {} {}", x, y, z);
-                        flag = true;
-                    }
+                    let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup_q13(x_q, y_q, z_q);
 
                     lookup_table()[(x*128*128 + y*128 + z) as usize] =
-                        (((accum >> (Q-6)) as u32) << 24) |
-                        (((accum_color_r >> (Q-8)) as u32) << 16) |
-                        (((accum_color_g >> (Q-8)) as u32) << 8) |
-                        (((accum_color_b >> (Q-8)) as u32) << 0);
+                        (((accum >> (13-6)) as u32) << 24) |
+                        (((accum_color_r >> (13-8)) as u32) << 16) |
+                        (((accum_color_g >> (13-8)) as u32) << 8) |
+                        (((accum_color_b >> (13-8)) as u32) << 0);
                 }
             }
         }
