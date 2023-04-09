@@ -192,7 +192,7 @@ impl Julia {
                 min_distance_q13 = min_distance_q13.min(this_distance_q13);
 
                 accum_q13 = (accum_q13 * this_accum_q17) >> 17;
-                assert!(accum_q13 < (1.5 * FQ13) as i32);
+                debug_assert!(accum_q13 < (1.5 * FQ13) as i32);
                 if this_accum_q17 > 0 {
                     x_q13 = (x_q13 << 17) / this_accum_q17 - (1 << 13);
                     y_q13 = (y_q13 << 17) / this_accum_q17 - (1 << 13);
@@ -205,14 +205,18 @@ impl Julia {
                 cos_sin_q13(theta).1
             }
 
-            let base_color_r = (1.75*FQ13) as i32 + qsin_q13(((3.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
-            let base_color_g = (1.75*FQ13) as i32 + qsin_q13(((4.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
-            let base_color_b = (1.75*FQ13) as i32 + qsin_q13(((6.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
+            const CONST_1: i32 = (1.75*FQ13) as i32;
+            const COEFF_1: i32 = (0.57*FQ13) as i32;
+            const COEFF_2: i32 = (0.0227*FQ13) as i32;
+
+            let base_color_r = CONST_1 + qsin_q13((3*COEFF_1 * min_distance_q13) >> 13);
+            let base_color_g = CONST_1 + qsin_q13((4*COEFF_1 * min_distance_q13) >> 13);
+            let base_color_b = CONST_1 + qsin_q13((6*COEFF_1 * min_distance_q13) >> 13);
 
             let exp_accum = qexp_q13(accum_q13 as i32 * 32);
-            let accum_color_r = (0.0227*FQ13) as i32 * base_color_r / exp_accum;
-            let accum_color_g = (0.0227*FQ13) as i32 * base_color_g / exp_accum;
-            let accum_color_b = (0.0227*FQ13) as i32 * base_color_b / exp_accum;
+            let accum_color_r = COEFF_2 * base_color_r / exp_accum;
+            let accum_color_g = COEFF_2 * base_color_g / exp_accum;
+            let accum_color_b = COEFF_2 * base_color_b / exp_accum;
 
             accum_q13 = accum_q13.min(1<<13 - 1);
 
