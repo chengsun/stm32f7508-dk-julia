@@ -5,6 +5,9 @@ readme = "README.md"
 name = "stm32f7508-dk-julia"
 version = "0.1.0"
 
+[features]
+strict_frame_timing = []
+
 [dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.6.10"
