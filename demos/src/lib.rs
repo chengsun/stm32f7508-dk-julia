@@ -1,13 +1,19 @@
 #![cfg_attr(feature="real", no_std)]
 
-include!(concat!(env!("OUT_DIR"), "/lookup_table.rs"));
-
 #[cfg_attr(feature="real", link_section = ".fb")]
 static mut FB: [u16; FB_W*FB_H] = [0; FB_W*FB_H];
 
 #[inline(always)]
 pub fn fb() -> &'static mut [u16; FB_W*FB_H] {
     unsafe { &mut FB }
+}
+
+#[cfg_attr(feature="real", link_section = ".fb")]
+static mut LOOKUP_TABLE: [u32; 128*128*128] = [0; 128*128*128];
+
+#[inline(always)]
+pub fn lookup_table() -> &'static mut [u32; 128*128*128] {
+    unsafe { &mut LOOKUP_TABLE }
 }
 
 pub trait Context {
@@ -80,6 +86,70 @@ impl Julia {
         for x in 0..(FB_W * FB_H) {
             fb()[x] = 0;
         }
+
+        fn rotate_2d(p: (f64, f64), angle: f64) -> (f64, f64) {
+            let (sin, cos) = angle.sin_cos();
+            (cos * p.0 + sin * p.1, cos * p.1 - sin * p.0)
+        }
+
+        fn floor_mod(x: f64, y: f64) -> f64 {
+            x - y * (x / y).floor()
+        }
+
+        fn lookup(mut x: f64, mut y: f64, mut z: f64) -> (f64, f64, f64, f64) {
+            let mut min_distance : f64 = 100.;
+            let mut accum = 1.;
+
+            for _ in 0..20 {
+                x = floor_mod(x, 2.) - 1.;
+                y = floor_mod(y, 2.) - 1.;
+                z = floor_mod(z, 2.) - 1.;
+
+                (y, z) = rotate_2d((y, z), core::f64::consts::PI / 4.);
+
+                let sqr_distance = x*x + y*y + z*z;
+                let this_distance = sqr_distance.sqrt();
+                let this_accum = sqr_distance / 2.;
+
+                min_distance = min_distance.min(this_distance);
+
+                accum *= this_accum;
+                x = x / this_accum - 1.;
+                y = y / this_accum - 1.;
+                z = z / this_accum - 1.;
+            }
+
+            let base_color_r = 1.75 + (3. * min_distance * 0.9).sin();
+            let base_color_g = 1.75 + (4. * min_distance * 0.9).sin();
+            let base_color_b = 1.75 + (6. * min_distance * 0.9).sin();
+
+            let accum_color_r = 0.0227 * base_color_r / (accum * 32.).exp();
+            let accum_color_g = 0.0227 * base_color_g / (accum * 32.).exp();
+            let accum_color_b = 0.0227 * base_color_b / (accum * 32.).exp();
+
+            accum = accum.min(1.);
+
+            return (accum_color_r, accum_color_g, accum_color_b, accum);
+        }
+
+        for x in 0..128 {
+            let fx = (x as f64) / 64.;
+            for y in 0..128 {
+                let fy = (y as f64) / 64.;
+                for z in 0..128 {
+                    let fz = (z as f64) / 64.;
+
+                    let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup(fx, fy, fz);
+
+                    lookup_table()[x*128*128 + y*128 + z] =
+                        (((accum * 63.9999) as u32) << 24) |
+                        (((accum_color_r * 255.9999) as u32) << 16) |
+                        (((accum_color_g * 255.9999) as u32) << 8) |
+                        (((accum_color_b * 255.9999) as u32) << 0);
+                }
+            }
+        }
+
         Self { rotate_frame: 0, translate_frame: 0 }
     }
 
@@ -139,7 +209,7 @@ impl Julia {
                 ((p_zy >> 2) & 0x3F80) +
                 ((p_zy >> 25));
             context.stats_count_mems(1);
-            let lookup_result = LOOKUP_TABLE[index as usize];
+            let lookup_result = lookup_table()[index as usize];
 
             // distance: have 6 bits, require 6 bits
             context.stats_count_shrs(1);
