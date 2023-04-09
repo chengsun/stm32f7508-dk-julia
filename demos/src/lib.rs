@@ -265,6 +265,7 @@ impl Julia {
             return (accum_color_r, accum_color_g, accum_color_b, accum);
         }
 
+        let mut flag = false;
         for x in 0..128 {
             let x_q = x << (Q-6);
             let fx = (x as f64) / 64.;
@@ -277,6 +278,11 @@ impl Julia {
 
                     let (faccum_color_r, faccum_color_g, faccum_color_b, faccum) = flookup(fx, fy, fz);
                     let (accum_color_r, accum_color_g, accum_color_b, accum) = lookup(x_q, y_q, z_q);
+
+                    if !flag && faccum_color_b > 0.1 {
+                        println!("{} {} {}", x, y, z);
+                        flag = true;
+                    }
 
                     lookup_table()[(x*128*128 + y*128 + z) as usize] =
                         (((accum >> (Q-6)) as u32) << 24) |
