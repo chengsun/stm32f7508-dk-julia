@@ -164,29 +164,30 @@ impl Julia {
             fb()[x] = 0;
         }
 
-        fn lookup_q13(mut x: i32, mut y: i32, mut z: i32) -> (i32, i32, i32, i32) {
-            let mut min_distance = i32::MAX;
-            let mut accum = 1i32 << 13;
+        fn lookup_q13(mut x_q13: i32, mut y_q13: i32, mut z_q13: i32) -> (i32, i32, i32, i32) {
+            let mut min_distance_q13 = i32::MAX;
+            let mut accum_q13 = 1i32 << 13;
 
-            for iter in 0..20 {
-                x = (x & ((1<<(13+1)) - 1)) - (1<<13);
-                y = (y & ((1<<(13+1)) - 1)) - (1<<13);
-                z = (z & ((1<<(13+1)) - 1)) - (1<<13);
+            for _ in 0..20 {
+                x_q13 = (x_q13 & ((1<<(13+1)) - 1)) - (1<<13);
+                y_q13 = (y_q13 & ((1<<(13+1)) - 1)) - (1<<13);
+                z_q13 = (z_q13 & ((1<<(13+1)) - 1)) - (1<<13);
 
                 const Q2_SQRT_2: i32 = (1.414213562 * FQ13) as i32;
-                (y, z) = ((Q2_SQRT_2 * (y + z)) >> (13+1), (Q2_SQRT_2 * (z - y)) >> (13+1));
+                (y_q13, z_q13) = ((Q2_SQRT_2 * (y_q13 + z_q13)) >> (13+1), (Q2_SQRT_2 * (z_q13 - y_q13)) >> (13+1));
 
-                let sqr_distance = (x*x + y*y + z*z);
-                let this_distance = isqrt(sqr_distance);
-                let this_accum = sqr_distance >> (13+1);
+                let sqr_distance_q26 = x_q13*x_q13 + y_q13*y_q13 + z_q13*z_q13;
+                let this_distance_q13 = isqrt(sqr_distance_q26);
+                let this_accum_q17 = (sqr_distance_q26/2) >> 9;
 
-                min_distance = min_distance.min(this_distance);
+                min_distance_q13 = min_distance_q13.min(this_distance_q13);
 
-                accum = (accum * this_accum) >> 13;
-                let this_accum = this_accum.max(1);
-                x = (x << 13) / this_accum - (1 << 13);
-                y = (y << 13) / this_accum - (1 << 13);
-                z = (z << 13) / this_accum - (1 << 13);
+                accum_q13 = (accum_q13 * this_accum_q17) >> 17;
+                if this_accum_q17 > 0 {
+                    x_q13 = (x_q13 << 17) / this_accum_q17 - (1 << 13);
+                    y_q13 = (y_q13 << 17) / this_accum_q17 - (1 << 13);
+                    z_q13 = (z_q13 << 17) / this_accum_q17 - (1 << 13);
+                }
             }
 
             fn qsin_q13(theta: i32) -> i32 {
@@ -194,21 +195,20 @@ impl Julia {
                 cos_sin_q13(theta).1
             }
 
-            let base_color_r = (1.75*FQ13) as i32 + qsin_q13(((3.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
-            let base_color_g = (1.75*FQ13) as i32 + qsin_q13(((4.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
-            let base_color_b = (1.75*FQ13) as i32 + qsin_q13(((6.*0.57*FQ13) as i32 * min_distance as i32) >> 13);
+            let base_color_r = (1.75*FQ13) as i32 + qsin_q13(((3.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
+            let base_color_g = (1.75*FQ13) as i32 + qsin_q13(((4.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
+            let base_color_b = (1.75*FQ13) as i32 + qsin_q13(((6.*0.57*FQ13) as i32 * min_distance_q13 as i32) >> 13);
 
-            let exp_accum = qexp_q13(accum as i32 * 32);
+            let exp_accum = qexp_q13(accum_q13 as i32 * 32);
             let accum_color_r = (0.0227*FQ13) as i32 * base_color_r / exp_accum;
             let accum_color_g = (0.0227*FQ13) as i32 * base_color_g / exp_accum;
             let accum_color_b = (0.0227*FQ13) as i32 * base_color_b / exp_accum;
 
-            accum = accum.min(1<<13);
+            accum_q13 = accum_q13.min(1<<13);
 
-            return (accum_color_r, accum_color_g, accum_color_b, accum);
+            return (accum_color_r, accum_color_g, accum_color_b, accum_q13);
         }
 
-        let mut flag = false;
         for x in 0..128 {
             let x_q = x << (13-6);
             for y in 0..128 {
