@@ -188,7 +188,10 @@ fn main() -> ! {
         // FMC_D6_DA6   PE9  12
         // FMC_D7_DA7   PE10 12
         // FMC_D8_DA8   PE11 12
+        // FMC_D9_DA9   PE12 12
+        // FMC_D10_DA10 PE13 12
         // FMC_D11_DA11 PE14 12
+        // FMC_D12_DA12 PE15 12
         // FMC_D13_DA13 PD8  12
         // FMC_D14_DA14 PD9  12
         // FMC_D15_DA15 PD10 12
@@ -248,7 +251,7 @@ fn main() -> ! {
                                       .  moder14().alternate()
                                       .  moder15().alternate() });
 
-        // PE{0,1,7..11,14}
+        // PE{0,1,7..15}
         gpioe.afrl   .modify(|_, w| { w
                                       .   afrl0 ().af12()
                                       .   afrl1 ().af12()
@@ -258,7 +261,10 @@ fn main() -> ! {
                                       .   afrh9 ().af12()
                                       .   afrh10().af12()
                                       .   afrh11().af12()
-                                      .   afrh14().af12() });
+                                      .   afrh12().af12()
+                                      .   afrh13().af12()
+                                      .   afrh14().af12()
+                                      .   afrh15().af12() });
         gpioe.otyper .modify(|_, w| { w
                                       .     ot0 ().push_pull()
                                       .     ot1 ().push_pull()
@@ -267,7 +273,10 @@ fn main() -> ! {
                                       .     ot9 ().push_pull()
                                       .     ot10().push_pull()
                                       .     ot11().push_pull()
-                                      .     ot14().push_pull() });
+                                      .     ot12().push_pull()
+                                      .     ot13().push_pull()
+                                      .     ot14().push_pull()
+                                      .     ot15().push_pull() });
         gpioe.pupdr  .modify(|_, w| { w
                                       .  pupdr0 ().floating()
                                       .  pupdr1 ().floating()
@@ -276,7 +285,10 @@ fn main() -> ! {
                                       .  pupdr9 ().floating()
                                       .  pupdr10().floating()
                                       .  pupdr11().floating()
-                                      .  pupdr14().floating() });
+                                      .  pupdr12().floating()
+                                      .  pupdr13().floating()
+                                      .  pupdr14().floating()
+                                      .  pupdr15().floating() });
         gpioe.ospeedr.modify(|_, w| { w
                                       .ospeedr0 ().very_high_speed()
                                       .ospeedr1 ().very_high_speed()
@@ -285,7 +297,10 @@ fn main() -> ! {
                                       .ospeedr9 ().very_high_speed()
                                       .ospeedr10().very_high_speed()
                                       .ospeedr11().very_high_speed()
-                                      .ospeedr14().very_high_speed() });
+                                      .ospeedr12().very_high_speed()
+                                      .ospeedr13().very_high_speed()
+                                      .ospeedr14().very_high_speed()
+                                      .ospeedr15().very_high_speed() });
         gpioe.moder  .modify(|_, w| { w
                                       .  moder0 ().alternate()
                                       .  moder1 ().alternate()
@@ -294,7 +309,10 @@ fn main() -> ! {
                                       .  moder9 ().alternate()
                                       .  moder10().alternate()
                                       .  moder11().alternate()
-                                      .  moder14().alternate() });
+                                      .  moder12().alternate()
+                                      .  moder13().alternate()
+                                      .  moder14().alternate()
+                                      .  moder15().alternate() });
 
         // PF{0..5,11..15}
         gpiof.afrl   .modify(|_, w| { w
