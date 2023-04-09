@@ -8,7 +8,7 @@ pub fn fb() -> &'static mut [u16; FB_W*FB_H] {
     unsafe { &mut FB }
 }
 
-#[cfg_attr(feature="real", link_section = ".fb")]
+#[cfg_attr(feature="real", link_section = ".lut")]
 static mut LOOKUP_TABLE: [u32; 128*128*128] = [0; 128*128*128];
 
 #[inline(always)]

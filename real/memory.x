@@ -4,8 +4,9 @@ MEMORY
   FLASH : ORIGIN = 0x00200000, LENGTH = 64K
   STACK : ORIGIN = 0x20000000, LENGTH = 1K
   PRIORITY : ORIGIN = 0x20000000 + LENGTH(STACK), LENGTH = 25*256*5
-  FB : ORIGIN = 0x20000000 + LENGTH(STACK) + LENGTH(PRIORITY), LENGTH = 480*272
+  FB : ORIGIN = 0x20000000 + LENGTH(STACK) + LENGTH(PRIORITY), LENGTH = 480*272*2
   RAM : ORIGIN = 0x20000000 + LENGTH(STACK) + LENGTH(PRIORITY) + LENGTH(FB), LENGTH = 320K - LENGTH(STACK) - LENGTH(PRIORITY) - LENGTH(FB)
+  SDRAM : ORIGIN = 0xC0000000, LENGTH = 8M
 }
 
 /* This is where the call stack will be allocated. */
@@ -27,13 +28,18 @@ _stack_start = ORIGIN(STACK) + LENGTH(STACK);
    you want to place there. */
 /* Note that the section will not be zero-initialized by the runtime! */
 SECTIONS {
-     .priority (NOLOAD) : ALIGN(4) {
-       *(.priority);
-       . = ALIGN(16);
-     } > PRIORITY
+    .priority (NOLOAD) : ALIGN(4) {
+        *(.priority);
+        . = ALIGN(16);
+    } > PRIORITY
 
-     .fb (NOLOAD) : ALIGN(4) {
-       *(.fb);
-       . = ALIGN(16);
-     } > FB
-   } INSERT AFTER .bss;
+    .fb (NOLOAD) : ALIGN(4) {
+        *(.fb);
+        . = ALIGN(16);
+    } > FB
+
+    .lut (NOLOAD) : ALIGN(4) {
+        *(.lut);
+        . = ALIGN(16);
+    } > SDRAM
+} INSERT AFTER .bss;
