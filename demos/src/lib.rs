@@ -351,9 +351,10 @@ impl Demo for Julia {
         let (rotate_cos, rotate_sin) = cos_sin_q10(((4 * self.rotate_frame as i32) << 10) / ROTATE_FRAME_MAX as i32);
         let translate_z = (self.translate_frame as i32) * (2 << 10) / TRANSLATE_FRAME_MAX as i32;
 
-        for pixel_y in 0..FB_H {
+        let mut pixel_y = 0;
+        while pixel_y < FB_H {
             context.wait_for_line(pixel_y);
-            let mut pixel_x = (self.rotate_frame as usize + pixel_y as usize) & 1;
+            let mut pixel_x = ((self.rotate_frame as usize + (pixel_y>>1) as usize) & 1) << 1;
             while pixel_x < FB_W {
                 let mut ray_direction_x = ((((pixel_x as i32)<<1) - (FB_W as i32)) << 10) / (FB_H as i32);
                 let mut ray_direction_y = ((((pixel_y as i32)<<1) - (FB_H as i32)) << 10) / (FB_H as i32);
@@ -364,9 +365,13 @@ impl Demo for Julia {
 
                 let value = self.compute_value_q10(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
                 fb()[pixel_y * FB_W + pixel_x] = value;
+                fb()[pixel_y * FB_W + pixel_x+1] = value;
+                fb()[(pixel_y+1) * FB_W + pixel_x] = value;
+                fb()[(pixel_y+1) * FB_W + pixel_x+1] = value;
 
-                pixel_x += 2;
+                pixel_x += 4;
             }
+            pixel_y += 2;
         }
     }
 }
