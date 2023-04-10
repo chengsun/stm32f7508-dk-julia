@@ -462,9 +462,7 @@ fn main() -> ! {
                               .ctb1().issued() });
         while fmc.sdsr.read().busy().is_busy() {}
         // wait 100us
-        for _ in 0..20000 {
-            cortex_m::asm::nop();
-        }
+        cortex_m::asm::delay(20000);
         // issue "precharge all"
         fmc.sdcmr.write(|w| { w
                               .mode().pall()
