@@ -135,6 +135,14 @@ fn main() -> ! {
         rcc.cfgr.write(|w| { w.sw().pll().ppre1().div4().ppre2().div2() });
         while !rcc.cfgr.read().sws().is_pll() { }
 
+        // Set up MPU; instruct it that SDRAM area is "normal" (i.e. cacheable/reorderable)
+        unsafe {
+            cp.MPU.ctrl.write(0b101);
+            cp.MPU.rnr.write(0);
+            cp.MPU.rbar.write(0xc0000000);
+            cp.MPU.rasr.write(0b000_1_0_011_00_001011_00000000_00_11010_1);
+        }
+
         let gpioc = dp.GPIOC;
         let gpiod = dp.GPIOD;
         let gpioe = dp.GPIOE;
