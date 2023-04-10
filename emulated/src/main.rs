@@ -38,6 +38,7 @@ pub fn main() {
     let window = video_subsystem
         .window("stm32f7508-dk", FB_W.try_into().unwrap(), FB_H.try_into().unwrap())
         .position_centered()
+        .borderless()
         .build()
         .unwrap();
 
@@ -56,6 +57,8 @@ pub fn main() {
                 _ => {}
             }
         }
+
+        let frame_start = ::std::time::Instant::now();
 
         {
             let mut context = ContextS {
@@ -108,6 +111,13 @@ pub fn main() {
         }
 
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+
+        let frame_end = ::std::time::Instant::now();
+        let desired_duration = ::std::time::Duration::from_nanos(1_000_000_000 / 60);
+        let actual_duration = frame_end - frame_start;
+        if actual_duration < desired_duration {
+            let sleep_duration = desired_duration - actual_duration;
+            ::std::thread::sleep(sleep_duration);
+        }
     }
 }
