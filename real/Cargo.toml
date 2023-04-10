@@ -7,10 +7,12 @@ version = "0.1.0"
 
 [features]
 strict_frame_timing = []
+semihosting = ["dep:cortex-m-semihosting"]
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.6.10"
+cortex-m-semihosting = { version = "0.5", optional = true }
 panic-halt = "0.2.0"
 stm32f7 = { version = "0.13.0", features = ["stm32f750", "rt"] }
 demos = { path = "../demos", features = ["real"] }

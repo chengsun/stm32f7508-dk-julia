@@ -4,13 +4,18 @@
 use demos::Context;
 use panic_halt as _;
 
+#[cfg(feature = "semihosting")]
+use cortex_m_semihosting::hprintln as println;
+
 use core::cell::RefCell;
 use core::convert::TryInto;
 
+use cortex_m::peripheral::DWT;
 use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use stm32f7::stm32f750::{interrupt, Interrupt, LTDC, NVIC};
 
+static GDWT: Mutex<RefCell<Option<DWT>>> = Mutex::new(RefCell::new(None));
 static GLTDC: Mutex<RefCell<Option<LTDC>>> = Mutex::new(RefCell::new(None));
 static GSTATE: Mutex<RefCell<Option<demos::Julia>>> = Mutex::new(RefCell::new(None));
 
@@ -52,7 +57,7 @@ static LTDC_STATE: Mutex<RefCell<LTDCState>> = Mutex::new(RefCell::new(LTDCState
 
 #[entry]
 fn main() -> ! {
-    let _cp = cortex_m::Peripherals::take().unwrap();
+    let mut cp = cortex_m::Peripherals::take().unwrap();
     let dp = stm32f7::stm32f750::Peripherals::take().unwrap();
 
     cortex_m::interrupt::free(move |cs| {
@@ -487,6 +492,10 @@ fn main() -> ! {
         //////////////////////////////////////////////////////////////////////////
         // Initialize the demo
 
+        cp.DCB.enable_trace();
+        cortex_m::peripheral::DWT::unlock();
+        cp.DWT.enable_cycle_counter();
+        *GDWT.borrow(cs).borrow_mut() = Some(cp.DWT);
         *GSTATE.borrow(cs).borrow_mut() = Some(demos::Julia::new());
 
         //////////////////////////////////////////////////////////////////////////
@@ -791,11 +800,56 @@ impl<'a> demos::Context for ContextS<'a> {
     fn stats_count_fmuls(&mut self, _: usize) {}
 }
 
+#[derive(Debug, Default)]
+struct Counters {
+    cycle: u32,
+    cpi: u8,
+    exception: u8,
+    sleep: u8,
+    lsu: u8,
+    fold: u8,
+}
+
+impl Counters {
+    fn new() -> Self {
+        Self {
+            cycle: cortex_m::peripheral::DWT::cycle_count(),
+            cpi: cortex_m::peripheral::DWT::cpi_count(),
+            exception: cortex_m::peripheral::DWT::exception_count(),
+            sleep: cortex_m::peripheral::DWT::sleep_count(),
+            lsu: cortex_m::peripheral::DWT::lsu_count(),
+            fold: cortex_m::peripheral::DWT::fold_count(),
+        }
+    }
+
+    fn set(&self, dwt: &mut DWT) {
+        dwt.set_sleep_count(self.sleep);
+        dwt.set_cpi_count(self.cpi);
+        dwt.set_lsu_count(self.lsu);
+        dwt.set_fold_count(self.fold);
+        dwt.set_exception_count(self.exception);
+        dwt.set_cycle_count(self.cycle);
+    }
+
+    fn diff(&self, other: &Self) -> Self {
+        Self {
+            cycle: self.cycle - other.cycle,
+            cpi: self.cpi - other.cpi,
+            exception: self.exception - other.exception,
+            sleep: self.sleep - other.sleep,
+            lsu: self.lsu - other.lsu,
+            fold: self.fold - other.fold,
+        }
+    }
+}
+
 #[interrupt]
 fn LTDC() {
     cortex_m::interrupt::free(|cs| {
         let mut ltdc_ = GLTDC.borrow(cs).borrow_mut();
         let ltdc = ltdc_.as_mut().unwrap();
+        let mut dwt_ = GDWT.borrow(cs).borrow_mut();
+        let dwt = dwt_.as_mut().unwrap();
         ltdc.icr.write(|w| { w.clif().clear() });
 
         let mut state_ = GSTATE.borrow(cs).borrow_mut();
@@ -839,7 +893,11 @@ fn LTDC() {
             LTDCState::Initialised => {
                 let mut context = ContextS { ltdc };
                 use demos::Demo;
+                let counters_start = Counters::new();
                 state.render(&mut context);
+                let counters_stop = Counters::new();
+                #[cfg(feature = "semihosting")]
+                println!("{} ms", counters_stop.diff(&counters_start).cycle / 200_000);
                 context.wait_for_line(FB_H-1);
                 state.pre_render(&mut context);
             },
