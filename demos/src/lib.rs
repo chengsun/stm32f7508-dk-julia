@@ -364,9 +364,9 @@ impl Demo for Julia {
                 (ray_direction_y, ray_direction_z) = rotate_2d_q10(ray_direction_y, ray_direction_z, rotate_cos, rotate_sin);
 
                 let value = self.compute_value_q10(context, ray_direction_x, ray_direction_y, ray_direction_z, translate_z);
-                fb()[pixel_y * FB_W + pixel_x] = value;
-                fb()[pixel_y * FB_W + pixel_x+1] = value;
-                fb()[(pixel_y+1) * FB_W + pixel_x] = value;
+                fb()[(pixel_y+0) * FB_W + pixel_x+0] = value;
+                fb()[(pixel_y+0) * FB_W + pixel_x+1] = value;
+                fb()[(pixel_y+1) * FB_W + pixel_x+0] = value;
                 fb()[(pixel_y+1) * FB_W + pixel_x+1] = value;
 
                 pixel_x += 4;
