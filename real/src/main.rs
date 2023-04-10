@@ -760,12 +760,13 @@ impl<'a> ContextS<'a> {
             if self.ltdc.cpsr.read().cypos().bits() > LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
                 break;
             }
-            #[cfg(feature = "strict_frame_timing")]
-            if self.ltdc.isr.read().lif().is_reached() {
-                for pixel_x in 0..FB_W {
-                    demos::fb()[pixel_y * FB_W + pixel_x] = 222;
+            if cfg!(feature = "strict_frame_timing") {
+                if self.ltdc.isr.read().lif().is_reached() {
+                    for pixel_x in 0..FB_W {
+                        demos::fb()[pixel_y * FB_W + pixel_x] = 222;
+                    }
+                    panic!("Timed out on line {}", pixel_y);
                 }
-                panic!("Timed out on line {}", pixel_y);
             }
         }
     }
@@ -774,9 +775,10 @@ impl<'a> ContextS<'a> {
 impl<'a> demos::Context for ContextS<'a> {
     #[inline(always)]
     fn wait_for_line(&mut self, pixel_y: usize) {
-        #[cfg(feature = "strict_frame_timing")]
-        if self.ltdc.cpsr.read().cypos().bits() <= LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
-            self.wait_for_line_cold(pixel_y);
+        if cfg!(feature = "strict_frame_timing") {
+            if self.ltdc.cpsr.read().cypos().bits() <= LTDC_INFO.vsync + LTDC_INFO.vbp + pixel_y as u16 {
+                self.wait_for_line_cold(pixel_y);
+            }
         }
     }
     fn stats_count_adds(&mut self, _: usize) {}
@@ -842,7 +844,8 @@ fn LTDC() {
                 state.pre_render(&mut context);
             },
         }
-        #[cfg(feature = "strict_frame_timing")]
-        assert!(!ltdc.isr.read().lif().bit());
+        if cfg!(feature = "strict_frame_timing") {
+            assert!(!ltdc.isr.read().lif().bit());
+        }
     });
 }
